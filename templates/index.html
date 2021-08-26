@@ -1,0 +1,277 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PHFS</title>
+
+    <link href="/static/plugins/fontawesome-5.15.4/css/all.css" rel="stylesheet">
+</head>
+<body>
+
+    <h1>PHFS</h1>
+    <hr style="border-color: #333333">
+    <div id="file_tree"></div>
+
+</body>
+</html>
+
+<style>
+    body {
+        background-color: #000000;
+        color: #333333;
+    }
+
+    ul { /* Remove default bullets */
+        list-style-type: none;
+        padding-inline-start: 20px;
+        cursor: default;
+    }
+
+    .first_ul {
+        margin: 0;
+        padding: 0;
+    }
+
+    input[type="file"] {
+        display: none;
+    }
+
+    .nested {
+        display: none;
+    }
+
+    ul.active {
+        display: block;
+    }
+
+    label.active {
+        display: inline-block;
+    }
+
+    .fal {
+        font-family: "Font Awesome 5 Free";
+        font-weight: normal;
+    }
+
+    .upload-node-label, .download-node {
+        margin-left: 20px;
+    }
+
+    .folder-node:before, .file-node:before {
+        margin-right: 5px
+    }
+</style>
+
+<script src="/static/js/jquery-3.5.1.min.js"></script>
+<script>
+let node_list = [];
+let expended_node = ["/"];
+
+$(document).ready(function() {
+    let refresh = function() {
+        $.get(
+            "/file_tree",
+            {},
+            function (data) {
+                $("#file_tree").empty();
+                data = $.parseJSON(data);
+                console.log(data);
+                node_list = [];
+                dfs(data, node_list, 0)
+
+                console.log("node_list", node_list);
+
+                let ul_stack = [];
+                // let ul_list = []
+                let i = 0;
+                while (i < node_list.length) {
+                    // stack pop
+                    if (i > 0 && node_list[i - 1]["depth"] > node_list[i]["depth"]) {
+                        let j = 0;
+                        while (j < node_list[i - 1]["depth"] - node_list[i]["depth"]) {
+                            ul_stack.push("</ul>");
+                            ul_stack.push("</li>");
+                            j += 1
+                        }
+                    }
+
+                    // stack push
+                    if (i === 0) {
+                        ul_stack.push("<ul class='first_ul'>");
+                    } else if (node_list[i - 1]["depth"] < node_list[i]["depth"]) {
+                        if (expended_node.includes(node_list[i - 1]["info"]["path"])) {
+                            ul_stack.push("<ul class='nested active'>")
+                        } else {
+                            ul_stack.push("<ul class='nested'>")
+                        }
+                    }
+                    if (i + 1 < node_list.length && node_list[i]["depth"] < node_list[i + 1]["depth"]) {
+                        let li = "<li>" +
+                            "<span id='node_" + i + "_name'" +
+                            "class='folder-node fas fa-folder'>" + node_list[i]["info"]["name"] + "</span>" +
+                            "<label id='node_" + i + "' for='node_" + i + "_input' ";
+                        if(expended_node.includes(node_list[i]["info"]["path"])) {
+                            li += "class='upload-node-label nested fal fa-arrow-alt-circle-up active'></label>";
+                        } else {
+                            li += "class='upload-node-label nested fal fa-arrow-alt-circle-up'></label>";
+                        }
+                        li += "<input id='node_" + i + "_input' class='upload-node' type='file'/>";
+                        ul_stack.push(li);
+                    } else {
+                        ul_stack.push("<li>" +
+                            "<span id='node_" + i + "_name'" +
+                            "class='file-node fal fa-file'>" + node_list[i]["info"]["name"] + "</span>" +
+                            "<i id='node_" + i + "' " +
+                            "class='download-node fal fa-arrow-alt-circle-down' style='margin-left: 20px'></i>"
+                        );
+                        ul_stack.push("</li>");
+                    }
+                    i += 1;
+                }
+                i = 0
+                let tag_stack = [];
+                while (i < ul_stack.length) {
+                    if (ul_stack[i].substr(0, 4) === "</ul") {
+                        tag_stack.pop();
+                    } else if (ul_stack[i].substr(0, 4) === "</li") {
+                        tag_stack.pop();
+                    } else if (ul_stack[i].substr(0, 3) === "<ul") {
+                        tag_stack.push("</ul>");
+                    } else if (ul_stack[i].substr(0, 3) === "<li") {
+                        tag_stack.push("</li>");
+                    }
+                    // console.log(tag_stack)
+                    i += 1;
+                }
+                while (tag_stack.length > 0) {
+                    ul_stack.push(tag_stack.pop())
+                }
+
+                // console.log("ul_stack", ul_stack)
+                // console.log(ul_stack.join(""))
+
+                $("#file_tree").html(ul_stack.join(""))
+            }
+        )
+    };
+
+    refresh();
+
+    function dfs(tree, node_list, depth) {
+        node_list.push({
+            "depth": depth,
+            "info": tree,
+        })
+        if(tree["sub"] != null) {
+            let sorted = Object.keys(tree["sub"]).sort(
+                function(x, y) {
+                    let res = 0
+                    if(tree["sub"][x]["type"] === tree["sub"][y]["type"]) {
+                        res = x.toLowerCase().localeCompare(y.toLowerCase());
+                    }
+                    else if(tree["sub"][x]["type"] === "dir" && tree["sub"][y]["type"] === "file") {
+                        res = -1;
+                    }
+                    else if(tree["sub"][x]["type"] === "file" && tree["sub"][y]["type"] === "dir") {
+                        res = 1;
+                    }
+                    return res;
+                }
+            );
+            for(let node of sorted) {
+                dfs(tree["sub"][node], node_list, depth + 1);
+            }
+        }
+    }
+
+    $("#file_tree")
+        .on("click", ".folder-node", function(event) {
+            let node = node_list[parseInt(this.id.replace("node_", "").replace("_file_name"))];
+            if($(this).hasClass("fa-folder")) {
+                $(this).removeClass("fa-folder").addClass("fa-folder-open");
+                expended_node.push(node["info"]["path"])
+            }
+            else {
+                $(this).removeClass("fa-folder-open").addClass("fa-folder");
+                expended_node.splice(expended_node.indexOf(node["info"]["path"]), 1);
+            }
+            $(this).parent().find(">.nested").toggleClass("active");
+            console.log(expended_node)
+        })
+        .on("click", ".file-node", function(event) {
+            let node = node_list[parseInt(this.id.replace("node_", "").replace("_file_name"))];
+/*            window.open("/image" + "?" + $.param({
+                "file_path": node["info"]["path"],
+            }), "_blank");*/
+            $.ajax({
+                url: "/file_api" + "?" + $.param({
+                    "file_path": node["info"]["path"],
+                }),
+                type: "GET",
+                success: function(data){
+                    console.log("GET success", data);
+                    // let w = window.open("about:blank");
+                    // w.document.open();
+                    // w.document.write(data);
+                    // w.document.close();
+                    window.open(data)
+                },
+                error: function(data){
+                    console.log("GET error", data);
+                }
+            });
+        })
+        .on("click", ".download-node", function(event) {
+            let node = node_list[parseInt(this.id.replace("node_", ""))];
+            let form_data = new FormData();
+            form_data.append("file_path", node["info"]["path"]);
+            $.ajax({
+                url: "/file_api",
+                type: "POST",
+                data: form_data,
+                processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+                contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+                xhrFields: {
+                    responseType: "blob"
+                },
+                success: function(data){
+                    console.log("post success");
+                    let link = window.URL.createObjectURL(data);
+                    let a = $("<a class='temp-download-link' />");
+                    a.attr("download", node["info"]["name"]);
+                    a.attr("href", link);
+                    $("body").append(a);
+                    a[0].click();
+                    $(".temp-download-link").remove();
+                },
+                error: function(data){
+                    console.log("post error", data);
+                }
+            });
+        })
+        .on("change", ".upload-node", function(event) {
+            let node = node_list[parseInt(this.id.replace("node_", ""))];
+            let form_data = new FormData();
+            form_data.append("file_path", node["info"]["path"]);
+            form_data.append("upload_file", this.files[0]);
+            console.log(this.files[0])
+            $.ajax({
+                url: "/file_api",
+                type: "PUT",
+                data: form_data,
+                processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+                contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+                success: function(data){
+                    console.log("put success", data);
+                    refresh();
+                },
+                error: function(data){
+                    console.log("put error", data);
+                }
+            });
+        })
+    ;
+
+});
+</script>

@@ -1,0 +1,40 @@
+
+# -*- coding: utf-8 -*-
+
+from flask import Flask
+from flask_login import LoginManager
+
+from auth import auth as auth_blueprint
+from config import DB_URI
+from main import main as main_blueprint
+from model import db, User
+
+app = Flask(__name__)
+app.secret_key = "d5ff7c15-6134-4de9-a88b-6e9edece3739"
+
+# init SQLAlchemy so we can use it later in our models
+app.config["SQLALCHEMY_DATABASE_URI"] = DB_URI
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
+
+db.init_app(app)
+
+# blueprint for auth routes in our app
+app.register_blueprint(auth_blueprint)
+
+# blueprint for non-auth parts of app
+app.register_blueprint(main_blueprint)
+
+login_manager = LoginManager()
+login_manager.login_view = "auth.login"
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    # since the user_id is just the primary key of our user table, use it in the query for the user
+    return User.query.get(int(user_id))
+
+
+if __name__ == "__main__":
+    # db.create_all(app=app)  # pass the create_app result so Flask-SQLAlchemy gets the configuration.
+    app.run(port=12345, debug=True)
