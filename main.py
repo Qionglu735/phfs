@@ -117,7 +117,7 @@ def file_api():
                 token.use += 1
                 db.session.commit()
                 file_path = token.file_path.lstrip("/")
-                print ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)
+                # print ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)
                 return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
     elif request.method == "POST":
         file_path = request.form.get("file_path").lstrip("/")

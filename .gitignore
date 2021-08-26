@@ -1,3 +1,6 @@
+.idea
 *.pyc
-alembic/versions
+alembic
+alembic.ini
+config.py
 venv
