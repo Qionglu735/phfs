@@ -19,10 +19,10 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
 db.init_app(app)
 
 # blueprint for auth routes in our app
-app.register_blueprint(auth_blueprint)
+app.register_blueprint(auth_blueprint, url_prefix="/treasure")
 
 # blueprint for non-auth parts of app
-app.register_blueprint(main_blueprint)
+app.register_blueprint(main_blueprint, url_prefix="/treasure")
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"

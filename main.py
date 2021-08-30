@@ -18,16 +18,6 @@ main = Blueprint("main", __name__)
 
 
 @main.route("/")
-def root_page():
-    return redirect(url_for("main.index"))
-
-
-@main.route('/favicon.ico')
-def favicon():
-    return send_file("static/favicon.ico", mimetype='image/vnd.microsoft.icon')
-
-
-@main.route("/treasure")
 @login_required(10)
 def index():
     return render_template("index.html")
@@ -88,45 +78,30 @@ def file_api():
     if request.method == "GET":
         file_path = request.args.get("file_path")
         token = request.args.get("token")
-        now = datetime.datetime.now()
         if token is None:
-            token = Token.query.filter_by(user_id=current_user.id, file_path=file_path).first()
-            if not token or token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
-                token = Token(token_id=uuid.uuid4().hex,
-                              file_path=file_path,
-                              effective_time=now,
-                              user_id=current_user.id)
-                db.session.add(token)
-                db.session.commit()
-
-            return "/preview?" + "&".join([
+            token = get_or_create_token(file_path, current_user)
+            return url_for("main.preview") + "?" + "&".join([
                 # "file_path=" + file_path,
                 "token=" + token.token_id,
             ])
-        elif token == "":
-            return "Error"
         else:
-            token = Token.query.filter_by(token_id=token).first()
-            if token is None:
-                return "Error"
-            if token.use >= token.max_use:
-                return "Error"
-            if token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
-                return "Error"
-            else:
+            token = use_token(token)
+            if isinstance(token, Token):
                 token.use += 1
                 db.session.commit()
                 file_path = token.file_path.lstrip("/")
-                # print ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)
+                print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
                 return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
+            else:
+                return render_template("error.html", message=token)
     elif request.method == "POST":
         file_path = request.form.get("file_path").lstrip("/")
-        print ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)
+        print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
         return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
     elif request.method == "PUT":
         file_path = request.form.get("file_path").lstrip("/")
         upload_file = request.files.get("upload_file")
-        print ROOT_FOLDER, file_path, upload_file.filename
+        print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
         filename = secure_filename(upload_file.filename)
         if os.path.exists(os.path.join(ROOT_FOLDER, file_path, filename)):
             duplicate = 2
@@ -146,14 +121,60 @@ def file_api():
 @login_required(10)
 def preview():
     token = request.args.get("token", "")
-    token = Token.query.filter_by(token_id=token).first()
+    token = check_token(token)
+    if isinstance(token, Token):
+        if token.file_path.split(".")[-1] in ["jpg", "png"]:
+            return render_template("image.html",
+                                   filename=token.file_path.split("/")[-1],
+                                   token=token.token_id)
+        elif token.file_path.split(".")[-1] in ["mp4"]:
+            return render_template("video.html",
+                                   filename=token.file_path.split("/")[-1],
+                                   token=token.token_id)
+        else:
+            token = use_token(token)
+            if isinstance(token, Token):
+                file_path = token.file_path.lstrip("/")
+                print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+                return send_file(os.path.join(ROOT_FOLDER, file_path))
+            else:
+                return render_template("error.html", message=token)
+    else:
+        return render_template("error.html", message=token)
+
+
+def get_or_create_token(file_path, target_user):
+    now = datetime.datetime.now()
+    token = Token.query.filter_by(user_id=target_user.id, file_path=file_path).first()
+    if token is None or token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
+        token = Token(token_id=uuid.uuid4().hex,
+                      file_path=file_path,
+                      effective_time=now,
+                      user_id=current_user.id)
+        db.session.add(token)
+        db.session.commit()
+    return token
+
+
+def check_token(token):
+    now = datetime.datetime.now()
+    if not isinstance(token, Token):
+        token = Token.query.filter_by(token_id=token).first()
     if token is None:
-        return "Error"
-    if token.file_path.split(".")[-1] in ["jpg", "png"]:
-        return render_template("image.html",
-                               filename=token.file_path.split("/")[-1],
-                               token=token.token_id)
-    if token.file_path.split(".")[-1] in ["mp4"]:
-        return render_template("video.html",
-                               filename=token.file_path.split("/")[-1],
-                               token=token.token_id)
+        return "Not exists"
+    elif token.use >= token.max_use:
+        return "Out of use"
+    elif token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
+        return "Out of time"
+    else:
+        return token
+
+
+def use_token(token):
+    token = check_token(token)
+    if isinstance(token, Token):
+        token.use += 1
+        db.session.commit()
+        return token
+    else:
+        return token

@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <title>PHFS</title>
 
+    <link href="/static/favicon.ico" rel="icon" type="image/x-icon"/>
     <link href="/static/plugins/fontawesome-5.15.4/css/all.css" rel="stylesheet">
 </head>
 <body>
@@ -71,16 +72,16 @@ let expended_node = ["/"];
 $(document).ready(function() {
     let refresh = function() {
         $.get(
-            "/file_tree",
+            "{{ url_for('main.file_tree') }}",
             {},
             function (data) {
                 $("#file_tree").empty();
                 data = $.parseJSON(data);
-                console.log(data);
+                // console.log(data);
                 node_list = [];
                 dfs(data, node_list, 0)
 
-                console.log("node_list", node_list);
+                // console.log("node_list", node_list);
 
                 let ul_stack = [];
                 // let ul_list = []
@@ -197,7 +198,6 @@ $(document).ready(function() {
                 expended_node.splice(expended_node.indexOf(node["info"]["path"]), 1);
             }
             $(this).parent().find(">.nested").toggleClass("active");
-            console.log(expended_node)
         })
         .on("click", ".file-node", function(event) {
             let node = node_list[parseInt(this.id.replace("node_", "").replace("_file_name"))];
@@ -205,20 +205,14 @@ $(document).ready(function() {
                 "file_path": node["info"]["path"],
             }), "_blank");*/
             $.ajax({
-                url: "/file_api" + "?" + $.param({
+                url: "{{ url_for('main.file_api') }}" + "?" + $.param({
                     "file_path": node["info"]["path"],
                 }),
                 type: "GET",
                 success: function(data){
-                    console.log("GET success", data);
-                    // let w = window.open("about:blank");
-                    // w.document.open();
-                    // w.document.write(data);
-                    // w.document.close();
                     window.open(data)
                 },
                 error: function(data){
-                    console.log("GET error", data);
                 }
             });
         })
@@ -227,7 +221,7 @@ $(document).ready(function() {
             let form_data = new FormData();
             form_data.append("file_path", node["info"]["path"]);
             $.ajax({
-                url: "/file_api",
+                url: "{{ url_for('main.file_api') }}",
                 type: "POST",
                 data: form_data,
                 processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
@@ -236,7 +230,6 @@ $(document).ready(function() {
                     responseType: "blob"
                 },
                 success: function(data){
-                    console.log("post success");
                     let link = window.URL.createObjectURL(data);
                     let a = $("<a class='temp-download-link' />");
                     a.attr("download", node["info"]["name"]);
@@ -246,7 +239,6 @@ $(document).ready(function() {
                     $(".temp-download-link").remove();
                 },
                 error: function(data){
-                    console.log("post error", data);
                 }
             });
         })
@@ -255,19 +247,16 @@ $(document).ready(function() {
             let form_data = new FormData();
             form_data.append("file_path", node["info"]["path"]);
             form_data.append("upload_file", this.files[0]);
-            console.log(this.files[0])
             $.ajax({
-                url: "/file_api",
+                url: "{{ url_for('main.file_api') }}",
                 type: "PUT",
                 data: form_data,
                 processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
                 contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
                 success: function(data){
-                    console.log("put success", data);
                     refresh();
                 },
                 error: function(data){
-                    console.log("put error", data);
                 }
             });
         })

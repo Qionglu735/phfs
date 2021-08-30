@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ filename }}</title>
+    <link href="/static/favicon.ico" rel="icon" type="image/x-icon"/>
 </head>
 <body class="black">
 <div class="center">
-    <img id="img" class="fit-height" src="/file_api?token={{ token }}" alt="Error"/>
+    <img id="img" class="fit-height" src="{{ url_for('main.file_api') }}?token={{ token }}" alt="Error"/>
 </div>
 </body>
 </html>
