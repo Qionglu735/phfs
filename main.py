@@ -1,9 +1,8 @@
 
 # -*- coding: utf-8 -*-
 
-from flask import Blueprint, render_template, redirect, request, send_file, url_for
+from flask import Blueprint, render_template, request, send_file, url_for
 from flask_login import current_user
-from werkzeug.utils import secure_filename
 
 import datetime
 import json
@@ -101,7 +100,6 @@ def file_api():
     elif request.method == "PUT":
         file_path = request.form.get("file_path").lstrip("/")
         upload_file = request.files.get("upload_file")
-        print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
         filename = secure_filename(upload_file.filename)
         if os.path.exists(os.path.join(ROOT_FOLDER, file_path, filename)):
             duplicate = 2
@@ -110,11 +108,16 @@ def file_api():
                 extension = filename.split(".")[-1]
                 filename = ".".join(filename.split(".")[:-1])
             while os.path.exists(
-                    os.path.join(ROOT_FOLDER, file_path, "{}({}).{}".format(filename, duplicate, extension))):
+                    os.path.join(ROOT_FOLDER, file_path, u"{}({}).{}".format(filename, duplicate, extension))):
                 duplicate += 1
-            filename = "{}({}).{}".format(filename, duplicate, extension)
+            filename = u"{}({}).{}".format(filename, duplicate, extension)
+        print(u"{} {} {}".format(ROOT_FOLDER, file_path, filename))
         upload_file.save(os.path.join(ROOT_FOLDER, file_path, filename))
         return "OK"
+
+
+def secure_filename(x):
+    return x.replace(" ", "_")
 
 
 @main.route("/preview")
