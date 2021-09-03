@@ -11,7 +11,7 @@ import os
 import uuid
 
 from auth import login_required
-from config import ROOT_FOLDER
+from config import ROOT_FOLDER, TITLE
 from model import db, Token
 
 main = Blueprint("main", __name__)
@@ -20,7 +20,7 @@ main = Blueprint("main", __name__)
 @main.route("/")
 @login_required(10)
 def index():
-    return render_template("index.html")
+    return render_template("index.html", title=TITLE)
 
 
 @main.route("/profile")

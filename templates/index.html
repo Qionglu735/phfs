@@ -3,17 +3,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>PHFS</title>
+    <title>{{ title }}</title>
 
     <link href="/static/favicon.ico" rel="icon" type="image/x-icon"/>
-    <link href="/static/plugins/fontawesome-5.15.4/css/all.css" rel="stylesheet">
+    <link href="/static/plugins/fontawesome-5.15.3/css/all.css" rel="stylesheet">
 </head>
 <body>
-
-    <h1>PHFS</h1>
+    <h1>{{ title }}</h1>
     <hr style="border-color: #333333">
     <div id="file_tree"></div>
 
+    <div id="loading-mask">
+        <div class="abs-center" id="loading-bar">
+            <div id="loading-bar-progress"></div>
+            <div class="align-center" id="loading-bar-total">
+                <h1 id="loading-text">Loading...</h1>
+                <i id="abort" class="fal fa-times-circle"></i>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
 
@@ -50,11 +58,6 @@
         display: inline-block;
     }
 
-    .fal {
-        font-family: "Font Awesome 5 Free";
-        font-weight: normal;
-    }
-
     .upload-node-label, .download-node {
         margin-left: 20px;
     }
@@ -62,12 +65,66 @@
     .folder-node:before, .file-node:before {
         margin-right: 5px
     }
+
+    .abs-center {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    .align-center {
+        text-align: center;
+    }
+
+    #loading-mask {
+        display: block;
+        z-index: 100;
+        background-color: rgba(0, 0, 0, 0.49);
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    #loading-bar {
+        width: 100vw;
+    }
+
+    #loading-bar-progress {
+        position: absolute;
+        width: 0%;
+        height: calc(40px * 1.4);
+        background-color: #444444;
+    }
+
+    #loading-bar-total {
+        position: absolute;
+        width: 100%;
+        height: calc(40px * 1.4);
+    }
+
+    #loading-text {
+        font-size: 40px;
+        line-height: 1.4;
+        color: #333333;
+        margin: 0;
+    }
+
+    #abort {
+        font-size: 40px;
+        line-height: 1.4;
+        color: #333333;
+        margin: 0;
+    }
 </style>
 
 <script src="/static/js/jquery-3.5.1.min.js"></script>
 <script>
 let node_list = [];
 let expended_node = ["/"];
+let ajax_obj = null;
 
 $(document).ready(function() {
     let refresh = function() {
@@ -113,18 +170,20 @@ $(document).ready(function() {
                             "class='folder-node fas fa-folder'>" + node_list[i]["info"]["name"] + "</span>" +
                             "<label id='node_" + i + "' for='node_" + i + "_input' ";
                         if(expended_node.includes(node_list[i]["info"]["path"])) {
-                            li += "class='upload-node-label nested fal fa-arrow-alt-circle-up active'></label>";
+                            li += "class='upload-node-label nested far fa-arrow-alt-circle-up active'></label>";
                         } else {
-                            li += "class='upload-node-label nested fal fa-arrow-alt-circle-up'></label>";
+                            li += "class='upload-node-label nested far fa-arrow-alt-circle-up'></label>";
                         }
                         li += "<input id='node_" + i + "_input' class='upload-node' type='file'/>";
                         ul_stack.push(li);
                     } else {
                         ul_stack.push("<li>" +
                             "<span id='node_" + i + "_name'" +
-                            "class='file-node fal fa-file'>" + node_list[i]["info"]["name"] + "</span>" +
+                            "class='file-node far fa-file'>" + node_list[i]["info"]["name"] + "</span>" +
                             "<i id='node_" + i + "' " +
-                            "class='download-node fal fa-arrow-alt-circle-down' style='margin-left: 20px'></i>"
+                            "class='download-node far fa-arrow-alt-circle-down'></i>" +
+                            "<i id='node_" + i + "_delete' " +
+                            "class='delete-node far fa-minus-circle'></i>"
                         );
                         ul_stack.push("</li>");
                     }
@@ -152,7 +211,9 @@ $(document).ready(function() {
                 // console.log("ul_stack", ul_stack)
                 // console.log(ul_stack.join(""))
 
-                $("#file_tree").html(ul_stack.join(""))
+                $("#file_tree").html(ul_stack.join(""));
+
+                $("#loading-mask").css("display", "none");
             }
         )
     };
@@ -204,7 +265,7 @@ $(document).ready(function() {
 /*            window.open("/image" + "?" + $.param({
                 "file_path": node["info"]["path"],
             }), "_blank");*/
-            $.ajax({
+            ajax_obj = $.ajax({
                 url: "{{ url_for('main.file_api') }}" + "?" + $.param({
                     "file_path": node["info"]["path"],
                 }),
@@ -220,7 +281,25 @@ $(document).ready(function() {
             let node = node_list[parseInt(this.id.replace("node_", ""))];
             let form_data = new FormData();
             form_data.append("file_path", node["info"]["path"]);
-            $.ajax({
+            ajax_obj = $.ajax({
+                xhr: function() {
+                    let _xhr = new window.XMLHttpRequest();
+                    _xhr.addEventListener("progress", function(event){
+                        if (event.lengthComputable) {
+                            let percent = event.loaded / event.total * 100;
+                            if (percent < 100) {
+                                $("#loading-text").html(
+                                    "Downloading... " + ("0000" + percent.toFixed(2)).slice(-5) + "%");
+                            }
+                            else {
+                                $("#loading-text").html(
+                                    "Processing... ");
+                            }
+                            $("#loading-mask").css("display", "block");
+                        }
+                    }, false);
+                    return _xhr;
+                },
                 url: "{{ url_for('main.file_api') }}",
                 type: "POST",
                 data: form_data,
@@ -230,6 +309,7 @@ $(document).ready(function() {
                     responseType: "blob"
                 },
                 success: function(data){
+                    $("#loading-mask").css("display", "none");
                     let link = window.URL.createObjectURL(data);
                     let a = $("<a class='temp-download-link' />");
                     a.attr("download", node["info"]["name"]);
@@ -242,12 +322,52 @@ $(document).ready(function() {
                 }
             });
         })
+        .on("click", ".delete-node", function(event) {
+            let node = node_list[parseInt(this.id.replace("node_", "").replace("_delete", ""))];
+            if (window.confirm("Delete " + node["info"]["name"] + " ?")) {
+                if (window.confirm("Confirm DELETE ?")) {
+                    let form_data = new FormData();
+                    form_data.append("file_path", node["info"]["path"]);
+                    ajax_obj = $.ajax({
+                        url: "{{ url_for('main.file_api') }}",
+                        type: "DELETE",
+                        data: form_data,
+                        processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+                        contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+                        success: function(data){
+                            refresh()
+                        },
+                        error: function(data){
+                        }
+                    });
+                }
+            }
+        })
         .on("change", ".upload-node", function(event) {
             let node = node_list[parseInt(this.id.replace("node_", ""))];
             let form_data = new FormData();
             form_data.append("file_path", node["info"]["path"]);
             form_data.append("upload_file", this.files[0]);
-            $.ajax({
+            ajax_obj = $.ajax({
+                xhr: function() {
+                    let _xhr = new window.XMLHttpRequest();
+                    _xhr.upload.addEventListener("progress", function(event){
+                        if (event.lengthComputable) {
+                            let percent = event.loaded / event.total * 100;
+                            $("#loading-bar-progress").css("width", percent + "%")
+                            if (percent < 100) {
+                                $("#loading-text").html(
+                                    "Uploading... " + ("0000" + percent.toFixed(2)).slice(-5) + "%");
+                            }
+                            else {
+                                $("#loading-text").html(
+                                    "Processing... ");
+                            }
+                            $("#loading-mask").css("display", "block");
+                        }
+                    }, false);
+                    return _xhr;
+                },
                 url: "{{ url_for('main.file_api') }}",
                 type: "PUT",
                 data: form_data,
@@ -259,6 +379,15 @@ $(document).ready(function() {
                 error: function(data){
                 }
             });
+        })
+    ;
+
+    $("#abort")
+        .on("click", function(event) {
+            if(ajax_obj != null) {
+                ajax_obj.abort();
+                refresh();
+            }
         })
     ;
 

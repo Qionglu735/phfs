@@ -37,4 +37,4 @@ def load_user(user_id):
 
 if __name__ == "__main__":
     # db.create_all(app=app)  # pass the create_app result so Flask-SQLAlchemy gets the configuration.
-    app.run(port=12345, debug=True)
+    app.run(host="0.0.0.0", port=12345, debug=True)
