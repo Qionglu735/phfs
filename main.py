@@ -7,6 +7,8 @@ from flask_login import current_user
 import datetime
 import json
 import os
+import re
+import sys
 import uuid
 
 from auth import login_required
@@ -14,6 +16,13 @@ from config import ROOT_FOLDER, TITLE
 from model import db, Token
 
 main = Blueprint("main", __name__)
+
+
+def encode_print(x):
+    if sys.platform == "win32":
+        print(x.encode("gbk"))
+    else:
+        print(x.encode("utf-8"))
 
 
 @main.route("/")
@@ -32,6 +41,7 @@ def profile():
 @login_required(10)
 def file_tree():
     if request.method == "GET":
+        black_list = ["venv", "idea", "plugins", ".git", "alembic"]
         root_folder = ROOT_FOLDER.rstrip("/")
         tree = {
             "type": "dir",
@@ -42,8 +52,8 @@ def file_tree():
         for root, dirs, files in os.walk(root_folder):
             # print root
             root = root.replace("\\", "/")
-            # if "venv" in root or ".idea" in root or "plugins" in root:
-            #     continue
+            if len([x for x in black_list if re.search(x, root) is not None]) > 0:
+                continue
 
             root = root.replace(ROOT_FOLDER, "", 1)
             path_list = list()
@@ -54,8 +64,8 @@ def file_tree():
             for p in path_list:
                 sub_tree = sub_tree["sub"][p]
             for d in sorted(dirs):
-                # if "venv" in d or ".idea" in d or "plugins" in d:
-                #     continue
+                if len([x for x in black_list if re.search(x, d) is not None]) > 0:
+                    continue
                 sub_tree["sub"][d] = {
                     "type": "dir",
                     "name": d,
@@ -71,7 +81,7 @@ def file_tree():
         return json.dumps(tree)
 
 
-@main.route("/file_api", methods=["GET", "POST", "PUT"])
+@main.route("/file_api", methods=["GET", "POST", "PUT", "DELETE"])
 @login_required(10)
 def file_api():
     if request.method == "GET":
@@ -89,30 +99,49 @@ def file_api():
                 token.use += 1
                 db.session.commit()
                 file_path = token.file_path.lstrip("/")
-                print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+                encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
                 return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
             else:
                 return render_template("error.html", message=token)
     elif request.method == "POST":
         file_path = request.form.get("file_path").lstrip("/")
-        print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+        encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
         return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
     elif request.method == "PUT":
         file_path = request.form.get("file_path").lstrip("/")
-        upload_file = request.files.get("upload_file")
-        filename = secure_filename(upload_file.filename)
-        if os.path.exists(os.path.join(ROOT_FOLDER, file_path, filename)):
-            duplicate = 2
-            extension = ""
-            if "." in filename:
-                extension = filename.split(".")[-1]
-                filename = ".".join(filename.split(".")[:-1])
-            while os.path.exists(
-                    os.path.join(ROOT_FOLDER, file_path, u"{}({}).{}".format(filename, duplicate, extension))):
-                duplicate += 1
-            filename = u"{}({}).{}".format(filename, duplicate, extension)
-        print(u"{} {} {}".format(ROOT_FOLDER, file_path, filename))
-        upload_file.save(os.path.join(ROOT_FOLDER, file_path, filename))
+        upload_type = request.form.get("type")
+        if upload_type == "folder":
+            folder_name = request.form.get("folder_name")
+            if os.path.exists(os.path.join(ROOT_FOLDER, file_path)):
+                if os.path.exists(os.path.join(ROOT_FOLDER, file_path, folder_name)):
+                    duplicate = 2
+                    while os.path.exists(
+                            os.path.join(ROOT_FOLDER, file_path, u"{}({})".format(folder_name, duplicate))):
+                        duplicate += 1
+                    folder_name = u"{}({})".format(folder_name, duplicate)
+                os.mkdir(os.path.join(ROOT_FOLDER, file_path, folder_name))
+            return "OK"
+        else:
+            upload_file = request.files.get("upload_file")
+            filename = secure_filename(upload_file.filename)
+            if os.path.exists(os.path.join(ROOT_FOLDER, file_path, filename)):
+                duplicate = 2
+                extension = ""
+                if "." in filename:
+                    extension = filename.split(".")[-1]
+                    filename = ".".join(filename.split(".")[:-1])
+                while os.path.exists(
+                        os.path.join(ROOT_FOLDER, file_path, u"{}({}).{}".format(filename, duplicate, extension))):
+                    duplicate += 1
+                filename = u"{}({}).{}".format(filename, duplicate, extension)
+            encode_print(u"PUT {} {} {}".format(ROOT_FOLDER, file_path, filename))
+            upload_file.save(os.path.join(ROOT_FOLDER, file_path, filename))
+            return "OK"
+    elif request.method == "DELETE":
+        file_path = request.form.get("file_path").lstrip("/")
+        if os.path.exists(os.path.join(ROOT_FOLDER, file_path)):
+            encode_print(u"DELETE {}".format(os.path.join(ROOT_FOLDER, file_path)))
+            os.remove(os.path.join(ROOT_FOLDER, file_path))
         return "OK"
 
 
@@ -138,7 +167,7 @@ def preview():
             token = use_token(token)
             if isinstance(token, Token):
                 file_path = token.file_path.lstrip("/")
-                print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+                encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
                 return send_file(os.path.join(ROOT_FOLDER, file_path))
             else:
                 return render_template("error.html", message=token)

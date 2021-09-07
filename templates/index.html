@@ -42,11 +42,7 @@
         padding: 0;
     }
 
-    input[type="file"] {
-        display: none;
-    }
-
-    .nested {
+    input[type="file"], .nested {
         display: none;
     }
 
@@ -54,7 +50,7 @@
         display: block;
     }
 
-    label.active {
+    label.active, i.active {
         display: inline-block;
     }
 
@@ -94,7 +90,7 @@
 
     #loading-bar-progress {
         position: absolute;
-        width: 0%;
+        width: 0;
         height: calc(40px * 1.4);
         background-color: #444444;
     }
@@ -108,14 +104,12 @@
     #loading-text {
         font-size: 40px;
         line-height: 1.4;
-        color: #333333;
         margin: 0;
     }
 
     #abort {
         font-size: 40px;
         line-height: 1.4;
-        color: #333333;
         margin: 0;
     }
 </style>
@@ -137,7 +131,6 @@ $(document).ready(function() {
                 // console.log(data);
                 node_list = [];
                 dfs(data, node_list, 0)
-
                 // console.log("node_list", node_list);
 
                 let ul_stack = [];
@@ -164,17 +157,35 @@ $(document).ready(function() {
                             ul_stack.push("<ul class='nested'>")
                         }
                     }
-                    if (i + 1 < node_list.length && node_list[i]["depth"] < node_list[i + 1]["depth"]) {
-                        let li = "<li>" +
-                            "<span id='node_" + i + "_name'" +
-                            "class='folder-node fas fa-folder'>" + node_list[i]["info"]["name"] + "</span>" +
+                    if(node_list[i]["info"]["type"] === "dir") {
+                        let li = "<li>" + "<span id='node_" + i + "_name'";
+                        if(expended_node.includes(node_list[i]["info"]["path"])) {
+                            li += "class='folder-node fas fa-folder-open'>";
+                        } else {
+                            li += "class='folder-node fas fa-folder'>";
+                        }
+                        li += node_list[i]["info"]["name"] + "</span>" +
                             "<label id='node_" + i + "' for='node_" + i + "_input' ";
                         if(expended_node.includes(node_list[i]["info"]["path"])) {
-                            li += "class='upload-node-label nested far fa-arrow-alt-circle-up active'></label>";
+                            li += "class='upload-node-label nested active'>";
+                            li += "<i class='far fa-arrow-alt-circle-up nested active'></i>";
+                            li += "</label>";
                         } else {
-                            li += "class='upload-node-label nested far fa-arrow-alt-circle-up'></label>";
+                            li += "class='upload-node-label nested'>";
+                            li += "<i class='far fa-arrow-alt-circle-up nested'></i>";
+                            li += "</label>";
                         }
                         li += "<input id='node_" + i + "_input' class='upload-node' type='file'/>";
+                        li += "<label id='node_" + i + "_create' ";
+                        if(expended_node.includes(node_list[i]["info"]["path"])) {
+                            li += "class='create-node nested active'>";
+                            li += "<i class='far fa-plus-circle nested active'></i>";
+                            li += "</label>";
+                        } else {
+                            li += "class='create-node nested'>";
+                            li += "<i class='far fa-plus-circle nested'></i>";
+                            li += "</label>";
+                        }
                         ul_stack.push(li);
                     } else {
                         ul_stack.push("<li>" +
@@ -183,9 +194,9 @@ $(document).ready(function() {
                             "<i id='node_" + i + "' " +
                             "class='download-node far fa-arrow-alt-circle-down'></i>" +
                             "<i id='node_" + i + "_delete' " +
-                            "class='delete-node far fa-minus-circle'></i>"
+                            "class='delete-node far fa-minus-circle'></i>" +
+                            "</li>"
                         );
-                        ul_stack.push("</li>");
                     }
                     i += 1;
                 }
@@ -259,6 +270,7 @@ $(document).ready(function() {
                 expended_node.splice(expended_node.indexOf(node["info"]["path"]), 1);
             }
             $(this).parent().find(">.nested").toggleClass("active");
+            $(this).parent().find(">label>.nested").toggleClass("active");
         })
         .on("click", ".file-node", function(event) {
             let node = node_list[parseInt(this.id.replace("node_", "").replace("_file_name"))];
@@ -379,6 +391,28 @@ $(document).ready(function() {
                 error: function(data){
                 }
             });
+        })
+        .on("click", ".create-node", function(event) {
+            let folder_name = window.prompt("New Folder Name", "New Folder");
+            if (folder_name != null && folder_name !== "") {
+                let node = node_list[parseInt(this.id.replace("node_", "").replace("_create"))];
+                let form_data = new FormData();
+                form_data.append("file_path", node["info"]["path"]);
+                form_data.append("type", "folder");
+                form_data.append("folder_name", folder_name);
+                ajax_obj = $.ajax({
+                    url: "{{ url_for('main.file_api') }}",
+                    type: "PUT",
+                    data: form_data,
+                    processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+                    contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+                    success: function(data){
+                        refresh();
+                    },
+                    error: function(data){
+                    }
+                });
+            }
         })
     ;
 
