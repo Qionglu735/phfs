@@ -5,7 +5,7 @@ from flask import Flask
 from flask_login import LoginManager
 
 from auth import auth as auth_blueprint
-from config import DB_URI
+from config import DB_ENABLE, DB_URI
 from main import main as main_blueprint
 from model import db, User
 
@@ -32,7 +32,10 @@ login_manager.init_app(app)
 @login_manager.user_loader
 def load_user(user_id):
     # since the user_id is just the primary key of our user table, use it in the query for the user
-    return User.query.get(int(user_id))
+    if DB_ENABLE:
+        return User.query.get(int(user_id))
+    else:
+        return 1
 
 
 if __name__ == "__main__":

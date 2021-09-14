@@ -12,7 +12,7 @@ import sys
 import uuid
 
 from auth import login_required
-from config import ROOT_FOLDER, TITLE
+from config import DB_ENABLE, ROOT_FOLDER, TITLE
 from model import db, Token
 
 main = Blueprint("main", __name__)
@@ -88,21 +88,32 @@ def file_api():
         file_path = request.args.get("file_path")
         token = request.args.get("token")
         if token is None:
-            token = get_or_create_token(file_path, current_user)
-            return url_for("main.preview") + "?" + "&".join([
-                # "file_path=" + file_path,
-                "token=" + token.token_id,
-            ])
+            if DB_ENABLE:
+                token = get_or_create_token(file_path, current_user)
+                return url_for("main.preview") + "?" + "&".join([
+                    # "file_path=" + file_path,
+                    "token=" + token.token_id,
+                ])
+            else:
+                return url_for("main.preview") + "?" + "&".join([
+                    # "file_path=" + file_path,
+                    "token=" + file_path,
+                ])
         else:
-            token = use_token(token)
-            if isinstance(token, Token):
-                token.use += 1
-                db.session.commit()
-                file_path = token.file_path.lstrip("/")
+            if DB_ENABLE:
+                token = use_token(token)
+                if isinstance(token, Token):
+                    token.use += 1
+                    db.session.commit()
+                    file_path = token.file_path.lstrip("/")
+                    encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+                    return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
+                else:
+                    return render_template("error.html", message=token)
+            else:
+                file_path = token.lstrip("/")
                 encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
                 return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
-            else:
-                return render_template("error.html", message=token)
     elif request.method == "POST":
         file_path = request.form.get("file_path").lstrip("/")
         encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
@@ -153,26 +164,40 @@ def secure_filename(x):
 @login_required(10)
 def preview():
     token = request.args.get("token", "")
-    token = check_token(token)
-    if isinstance(token, Token):
-        if token.file_path.split(".")[-1] in ["jpg", "png"]:
-            return render_template("image.html",
-                                   filename=token.file_path.split("/")[-1],
-                                   token=token.token_id)
-        elif token.file_path.split(".")[-1] in ["mp4"]:
-            return render_template("video.html",
-                                   filename=token.file_path.split("/")[-1],
-                                   token=token.token_id)
-        else:
-            token = use_token(token)
-            if isinstance(token, Token):
-                file_path = token.file_path.lstrip("/")
-                encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
-                return send_file(os.path.join(ROOT_FOLDER, file_path))
+    if DB_ENABLE:
+        token = check_token(token)
+        if isinstance(token, Token):
+            if token.file_path.split(".")[-1] in ["jpg", "png"]:
+                return render_template("image.html",
+                                       filename=token.file_path.split("/")[-1],
+                                       token=token.token_id)
+            elif token.file_path.split(".")[-1] in ["mp4"]:
+                return render_template("video.html",
+                                       filename=token.file_path.split("/")[-1],
+                                       token=token.token_id)
             else:
-                return render_template("error.html", message=token)
+                token = use_token(token)
+                if isinstance(token, Token):
+                    file_path = token.file_path.lstrip("/")
+                    encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+                    return send_file(os.path.join(ROOT_FOLDER, file_path))
+                else:
+                    return render_template("error.html", message=token)
+        else:
+            return render_template("error.html", message=token)
     else:
-        return render_template("error.html", message=token)
+        if token.split(".")[-1] in ["jpg", "png"]:
+            return render_template("image.html",
+                                   filename=token.split("/")[-1],
+                                   token=token)
+        elif token.split(".")[-1] in ["mp4"]:
+            return render_template("video.html",
+                                   filename=token.split("/")[-1],
+                                   token=token)
+        else:
+            file_path = token.lstrip("/")
+            encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
+            return send_file(os.path.join(ROOT_FOLDER, file_path))
 
 
 def get_or_create_token(file_path, target_user):

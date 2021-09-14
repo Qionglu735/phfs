@@ -8,6 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import functools
 
+from config import DB_ENABLE
 from model import db, User
 
 auth = Blueprint("auth", __name__)
@@ -79,11 +80,14 @@ def login_required(auth_level=1):
         def wrapper(*args, **kwargs):
             session["last_url"] = request.url
 
-            @_login_required  # from flask_login import login_required as _login_required
-            def inner(*_args, **_kwargs):
-                if current_user.auth < auth_level:
-                    return access_denied()
-                return f(*_args, **_kwargs)
-            return inner(*args, **kwargs)
+            if DB_ENABLE:
+                @_login_required  # from flask_login import login_required as _login_required
+                def inner(*_args, **_kwargs):
+                    if current_user.auth < auth_level:
+                        return access_denied()
+                    return f(*_args, **_kwargs)
+                return inner(*args, **kwargs)
+            else:
+                return f(*args, **kwargs)
         return wrapper
     return decorate
