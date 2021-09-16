@@ -12,10 +12,13 @@ import sys
 import uuid
 
 from auth import login_required
-from config import DB_ENABLE, ROOT_FOLDER, TITLE
+from config import DB_ENABLE, ROOT_FOLDER, TITLE, UPLOAD_CHUNK_SIZE
 from model import db, Token
 
 main = Blueprint("main", __name__)
+
+FOLDER_BLACK_LIST = ["venv", "idea", "plugins", ".git", "alembic"]
+EXTENSION_WHITE_LIST = ["tar.gz"]
 
 
 def encode_print(x):
@@ -28,7 +31,7 @@ def encode_print(x):
 @main.route("/")
 @login_required(10)
 def index():
-    return render_template("index.html", title=TITLE)
+    return render_template("index.html", title=TITLE, chunk_size=UPLOAD_CHUNK_SIZE)
 
 
 @main.route("/profile")
@@ -41,7 +44,6 @@ def profile():
 @login_required(10)
 def file_tree():
     if request.method == "GET":
-        black_list = ["venv", "idea", "plugins", ".git", "alembic"]
         root_folder = ROOT_FOLDER.rstrip("/")
         tree = {
             "type": "dir",
@@ -52,7 +54,7 @@ def file_tree():
         for root, dirs, files in os.walk(root_folder):
             # print root
             root = root.replace("\\", "/")
-            if len([x for x in black_list if re.search(x, root) is not None]) > 0:
+            if len([x for x in FOLDER_BLACK_LIST if re.search(x, root) is not None]) > 0:
                 continue
 
             root = root.replace(ROOT_FOLDER, "", 1)
@@ -64,7 +66,7 @@ def file_tree():
             for p in path_list:
                 sub_tree = sub_tree["sub"][p]
             for d in sorted(dirs):
-                if len([x for x in black_list if re.search(x, d) is not None]) > 0:
+                if len([x for x in FOLDER_BLACK_LIST if re.search(x, d) is not None]) > 0:
                     continue
                 sub_tree["sub"][d] = {
                     "type": "dir",
@@ -134,19 +136,45 @@ def file_api():
             return "OK"
         else:
             upload_file = request.files.get("upload_file")
+            part_info = request.form.get("part_info")
+            part_index, part_total = 0, 0
+            if re.match(r"\d+\|\d+", part_info):
+                _part_info_list = part_info.split("|")
+                part_index = int(_part_info_list[0])
+                part_total = int(_part_info_list[1])
             filename = secure_filename(upload_file.filename)
             if os.path.exists(os.path.join(ROOT_FOLDER, file_path, filename)):
                 duplicate = 2
-                extension = ""
-                if "." in filename:
-                    extension = filename.split(".")[-1]
-                    filename = ".".join(filename.split(".")[:-1])
+                extension = None
+                for ext in EXTENSION_WHITE_LIST:
+                    if filename.endswith(ext):
+                        extension = ext
+                        filename = filename[:-len("." + ext)]
+                filename_list = filename.split(".")
+                if extension is None and len(filename_list) > 1:
+                    extension = filename_list[-1]
+                    del filename_list[-1]
+
+                def merge_filename():
+                    return u"{}({})".format(".".join(filename_list), duplicate) \
+                               + ".{}".format(extension) if extension is not None else ""
                 while os.path.exists(
-                        os.path.join(ROOT_FOLDER, file_path, u"{}({}).{}".format(filename, duplicate, extension))):
+                        os.path.join(ROOT_FOLDER, file_path, merge_filename())):
                     duplicate += 1
-                filename = u"{}({}).{}".format(filename, duplicate, extension)
+                filename = merge_filename()
+            if part_index > 0:
+                filename += u".part{}".format(part_index)
             encode_print(u"PUT {} {} {}".format(ROOT_FOLDER, file_path, filename))
             upload_file.save(os.path.join(ROOT_FOLDER, file_path, filename))
+            if 0 < part_total == part_index:
+                true_filename = filename[:-len(u".part{}".format(part_total))]
+                with open(os.path.join(ROOT_FOLDER, file_path, true_filename), "wb") as f_out:
+                    for i in range(1, part_total + 1):
+                        part_filename = true_filename + u".part{}".format(i)
+                        encode_print(u"MERGE {} {} {}".format(ROOT_FOLDER, file_path, part_filename))
+                        with open(os.path.join(ROOT_FOLDER, file_path, part_filename), "rb") as f_in:
+                            f_out.write(f_in.read())
+                        os.remove(os.path.join(ROOT_FOLDER, file_path, part_filename))
             return "OK"
     elif request.method == "DELETE":
         file_path = request.form.get("file_path").lstrip("/")

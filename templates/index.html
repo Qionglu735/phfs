@@ -28,7 +28,7 @@
 <style>
     body {
         background-color: #000000;
-        color: #333333;
+        color: #222222;
     }
 
     ul { /* Remove default bullets */
@@ -119,6 +119,7 @@
 let node_list = [];
 let expended_node = ["/"];
 let ajax_obj = null;
+let abort = false;
 
 $(document).ready(function() {
     let refresh = function() {
@@ -175,7 +176,7 @@ $(document).ready(function() {
                             li += "<i class='far fa-arrow-alt-circle-up nested'></i>";
                             li += "</label>";
                         }
-                        li += "<input id='node_" + i + "_input' class='upload-node' type='file'/>";
+                        li += "<input id='node_" + i + "_input' class='upload-node' type='file' multiple='multiple'/>";
                         li += "<label id='node_" + i + "_create' ";
                         if(expended_node.includes(node_list[i]["info"]["path"])) {
                             li += "class='create-node nested active'>";
@@ -224,6 +225,8 @@ $(document).ready(function() {
 
                 $("#file_tree").html(ul_stack.join(""));
 
+                abort = false;
+
                 $("#loading-mask").css("display", "none");
             }
         )
@@ -257,6 +260,66 @@ $(document).ready(function() {
             }
         }
     }
+
+    let ajax_queue = {
+        queuedRequests: [],
+        addRequest: function (req) {
+            this.queuedRequests.push(req);
+            // if it's the first request, start execution
+            if (this.queuedRequests.length === 1) {
+                this.executeNextRequest();
+            }
+        },
+        clearQueue: function () {
+            this.queuedRequests = [];
+        },
+        executeNextRequest: function () {
+            let queuedRequests = this.queuedRequests;
+            queuedRequests[0]().then(function (data) {
+                queuedRequests.shift();
+                if (queuedRequests.length) {
+                    ajax_queue.executeNextRequest();
+                }
+                else {
+                    this.queue_complete();
+                }
+            });
+        },
+        queue_complete: function() {},
+    };
+
+    ajax_queue.queue_complete = function() {
+        refresh();
+    }
+
+    let progress_bar = {
+        progress: 0,
+        total: 0,
+        set_total: function(total) {
+            this.total = total;
+        },
+        display: function(event_progress) {
+            let percent = (this.progress + event_progress) / this.total * 100;
+            $("#loading-bar-progress").css("width", percent + "%")
+            if (percent < 100) {
+                $("#loading-text").html(
+                    "Uploading... " + ("0000" + percent.toFixed(2)).slice(-5) + "%");
+            } else {
+                $("#loading-text").html(
+                    "Processing... ");
+            }
+            $("#loading-mask").css("display", "block");
+        },
+        part_complete: function(event_progress) {
+            this.progress += event_progress;
+        },
+        reset: function() {
+            this.progress = 0;
+            this.total = 0;
+        }
+    }
+
+    let chunk_size = parseInt("{{ chunk_size }}");
 
     $("#file_tree")
         .on("click", ".folder-node", function(event) {
@@ -357,40 +420,89 @@ $(document).ready(function() {
         })
         .on("change", ".upload-node", function(event) {
             let node = node_list[parseInt(this.id.replace("node_", ""))];
-            let form_data = new FormData();
-            form_data.append("file_path", node["info"]["path"]);
-            form_data.append("upload_file", this.files[0]);
-            ajax_obj = $.ajax({
-                xhr: function() {
-                    let _xhr = new window.XMLHttpRequest();
-                    _xhr.upload.addEventListener("progress", function(event){
-                        if (event.lengthComputable) {
-                            let percent = event.loaded / event.total * 100;
-                            $("#loading-bar-progress").css("width", percent + "%")
-                            if (percent < 100) {
-                                $("#loading-text").html(
-                                    "Uploading... " + ("0000" + percent.toFixed(2)).slice(-5) + "%");
+            progress_bar.reset();
+            let total_size = 0;
+            for(let upload_file of this.files) {
+                total_size += upload_file.size;
+                progress_bar.set_total(total_size);
+                for (let i = 0; i < upload_file.size; i += chunk_size) {
+                    let blob = upload_file.slice(i, i + chunk_size)
+                    let form_data = new FormData();
+                    form_data.append("file_path", node["info"]["path"]);
+                    form_data.append("part_info",
+                        "" + (i / chunk_size + 1) + "|" + Math.ceil(upload_file.size / chunk_size));
+                    form_data.append("upload_file", blob, upload_file.name);
+                    ajax_queue.addRequest(() =>
+                        $.ajax({
+                            xhr: function () {
+                                let _xhr = new window.XMLHttpRequest();
+                                _xhr.upload.addEventListener("progress", function (event) {
+                                    if (event.lengthComputable) {
+                                        progress_bar.display(event.loaded);
+                                        // let percent = event.loaded / event.total * 100;
+                                        // $("#loading-bar-progress").css("width", percent + "%")
+                                        // if (percent < 100) {
+                                        //     $("#loading-text").html(
+                                        //         "Uploading... " + ("0000" + percent.toFixed(2)).slice(-5) + "%");
+                                        // } else {
+                                        //     $("#loading-text").html(
+                                        //         "Processing... ");
+                                        // }
+                                        // $("#loading-mask").css("display", "block");
+                                    }
+                                }, false);
+                                return _xhr;
+                            },
+                            url: "{{ url_for('main.file_api') }}",
+                            type: "PUT",
+                            data: form_data,
+                            processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+                            contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+                            beforeSend: function() {},
+                            success: function (data) {
+                                progress_bar.part_complete(blob.size);
+                            },
+                            error: function (data) {
                             }
-                            else {
-                                $("#loading-text").html(
-                                    "Processing... ");
-                            }
-                            $("#loading-mask").css("display", "block");
-                        }
-                    }, false);
-                    return _xhr;
-                },
-                url: "{{ url_for('main.file_api') }}",
-                type: "PUT",
-                data: form_data,
-                processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
-                contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
-                success: function(data){
-                    refresh();
-                },
-                error: function(data){
+                        })
+                    );
                 }
-            });
+            }
+            // refresh();
+            // let form_data = new FormData();
+            // form_data.append("file_path", node["info"]["path"]);
+            // form_data.append("upload_file", this.files[0]);
+            // ajax_obj = $.ajax({
+            //     xhr: function() {
+            //         let _xhr = new window.XMLHttpRequest();
+            //         _xhr.upload.addEventListener("progress", function(event){
+            //             if (event.lengthComputable) {
+            //                 let percent = event.loaded / event.total * 100;
+            //                 $("#loading-bar-progress").css("width", percent + "%")
+            //                 if (percent < 100) {
+            //                     $("#loading-text").html(
+            //                         "Uploading... " + ("0000" + percent.toFixed(2)).slice(-5) + "%");
+            //                 }
+            //                 else {
+            //                     $("#loading-text").html(
+            //                         "Processing... ");
+            //                 }
+            //                 $("#loading-mask").css("display", "block");
+            //             }
+            //         }, false);
+            //         return _xhr;
+            //     },
+            //     url: "{{ url_for('main.file_api') }}",
+            //     type: "PUT",
+            //     data: form_data,
+            //     processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+            //     contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+            //     success: function(data){
+            //         refresh();
+            //     },
+            //     error: function(data){
+            //     }
+            // });
         })
         .on("click", ".create-node", function(event) {
             let folder_name = window.prompt("New Folder Name", "New Folder");
@@ -418,6 +530,7 @@ $(document).ready(function() {
 
     $("#abort")
         .on("click", function(event) {
+            abort = true;
             if(ajax_obj != null) {
                 ajax_obj.abort();
                 refresh();
