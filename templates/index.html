@@ -262,26 +262,31 @@ $(document).ready(function() {
     }
 
     let ajax_queue = {
-        queuedRequests: [],
-        addRequest: function (req) {
-            this.queuedRequests.push(req);
-            // if it's the first request, start execution
-            if (this.queuedRequests.length === 1) {
-                this.executeNextRequest();
+        queued_requests: [],
+        add_request: function (req) {
+            this.queued_requests.push(req);
+            if (this.queued_requests.length === 1) {
+                this.execute_next_request();
             }
         },
-        clearQueue: function () {
-            this.queuedRequests = [];
+        clear_queue: function () {
+            this.queued_requests = [];
         },
-        executeNextRequest: function () {
-            let queuedRequests = this.queuedRequests;
-            queuedRequests[0]().then(function (data) {
-                queuedRequests.shift();
-                if (queuedRequests.length) {
-                    ajax_queue.executeNextRequest();
+        abort_queue: function() {
+            if (this.queued_requests.length) {
+                this.queued_requests[0].abort();
+            }
+            this.clear_queue();
+        },
+        execute_next_request: function () {
+            let queued_requests = this.queued_requests;
+            queued_requests[0]().then(function (data) {
+                queued_requests.shift();
+                if (queued_requests.length) {
+                    ajax_queue.execute_next_request();
                 }
                 else {
-                    this.queue_complete();
+                    ajax_queue.queue_complete();
                 }
             });
         },
@@ -432,7 +437,7 @@ $(document).ready(function() {
                     form_data.append("part_info",
                         "" + (i / chunk_size + 1) + "|" + Math.ceil(upload_file.size / chunk_size));
                     form_data.append("upload_file", blob, upload_file.name);
-                    ajax_queue.addRequest(() =>
+                    ajax_queue.add_request(() =>
                         $.ajax({
                             xhr: function () {
                                 let _xhr = new window.XMLHttpRequest();
@@ -533,8 +538,9 @@ $(document).ready(function() {
             abort = true;
             if(ajax_obj != null) {
                 ajax_obj.abort();
-                refresh();
             }
+            ajax_queue.abort_queue();
+            refresh();
         })
     ;
 

@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 
 from flask import Blueprint, render_template, request, send_file, url_for
@@ -17,7 +16,8 @@ from model import db, Token
 
 main = Blueprint("main", __name__)
 
-FOLDER_BLACK_LIST = ["venv", "idea", "plugins", ".git", "alembic"]
+FOLDER_BLACK_LIST = [r"\..*"]
+FILE_BLACK_LIST = [r"\..*"]
 EXTENSION_WHITE_LIST = ["tar.gz"]
 
 
@@ -52,10 +52,11 @@ def file_tree():
             "sub": dict()
         }
         for root, dirs, files in os.walk(root_folder):
+            dirs[:] = [d for d in dirs if len([x for x in FOLDER_BLACK_LIST if re.match(x, d) is not None]) == 0]
             # print root
             root = root.replace("\\", "/")
-            if len([x for x in FOLDER_BLACK_LIST if re.search(x, root) is not None]) > 0:
-                continue
+            # if len([x for x in FOLDER_BLACK_LIST if re.search(x, root) is not None]) > 0:
+            #     continue
 
             root = root.replace(ROOT_FOLDER, "", 1)
             path_list = list()
@@ -66,8 +67,8 @@ def file_tree():
             for p in path_list:
                 sub_tree = sub_tree["sub"][p]
             for d in sorted(dirs):
-                if len([x for x in FOLDER_BLACK_LIST if re.search(x, d) is not None]) > 0:
-                    continue
+                # if len([x for x in FOLDER_BLACK_LIST if re.search(x, d) is not None]) > 0:
+                #     continue
                 sub_tree["sub"][d] = {
                     "type": "dir",
                     "name": d,
@@ -75,6 +76,8 @@ def file_tree():
                     "sub": dict()
                 }
             for f in sorted(files):
+                if len([x for x in FILE_BLACK_LIST if re.match(x, f) is not None]) > 0:
+                    continue
                 sub_tree["sub"][f] = {
                     "type": "file",
                     "path": sub_tree["path"] + f,
@@ -157,7 +160,8 @@ def file_api():
 
                 def merge_filename():
                     return u"{}({})".format(".".join(filename_list), duplicate) \
-                               + ".{}".format(extension) if extension is not None else ""
+                           + ".{}".format(extension) if extension is not None else ""
+
                 while os.path.exists(
                         os.path.join(ROOT_FOLDER, file_path, merge_filename())):
                     duplicate += 1
