@@ -11,14 +11,19 @@ import sys
 import uuid
 
 from auth import login_required
-from config import DB_ENABLE, ROOT_FOLDER, TITLE, UPLOAD_CHUNK_SIZE
+from config import *
 from model import db, Token
 
 main = Blueprint("main", __name__)
 
-FOLDER_BLACK_LIST = [r"\..*"]
-FILE_BLACK_LIST = [r"\..*"]
-EXTENSION_WHITE_LIST = ["tar.gz"]
+
+def parse_file_path(file_path):
+    if file_path is not None:
+        file_path = file_path.replace("\\", "/")
+        print file_path
+        path_list = file_path.lstrip("/").split("/")
+        real_root = ROOT_FOLDER_DICT[path_list[0]]
+        return os.path.join(real_root, *path_list[1:])
 
 
 def encode_print(x):
@@ -44,45 +49,51 @@ def profile():
 @login_required(10)
 def file_tree():
     if request.method == "GET":
-        root_folder = ROOT_FOLDER.rstrip("/")
         tree = {
             "type": "dir",
             "name": "/",
             "path": "/",
             "sub": dict()
         }
-        for root, dirs, files in os.walk(root_folder):
-            dirs[:] = [d for d in dirs if len([x for x in FOLDER_BLACK_LIST if re.match(x, d) is not None]) == 0]
-            # print root
-            root = root.replace("\\", "/")
-            # if len([x for x in FOLDER_BLACK_LIST if re.search(x, root) is not None]) > 0:
-            #     continue
+        root_folder_list = [[root_name, root_folder] for root_name, root_folder in ROOT_FOLDER_DICT.items()]
+        root_folder_list.sort(cmp=lambda x, y: x[0] < y[0])
+        for root_item in root_folder_list:
+            root_name = root_item[0]
+            root_folder = root_item[1].rstrip("/")
+            sub_tree = {
+                "type": "dir",
+                "name": root_name,
+                "path": "/" + root_name + "/",
+                "sub": dict()
+            }
+            tree["sub"][root_name] = sub_tree
+            for root, dirs, files in os.walk(root_folder):
+                dirs[:] = [d for d in dirs if len([x for x in FOLDER_BLACK_LIST if re.match(x, d) is not None]) == 0]
+                root = root.replace("\\", "/")
+                # print(root)
+                root = root.replace(root_folder, "", 1)
+                path_list = list()
+                if "/" in root:
+                    path_list = root.split("/")[1:]
 
-            root = root.replace(ROOT_FOLDER, "", 1)
-            path_list = list()
-            if "/" in root:
-                path_list = root.split("/")[1:]
-
-            sub_tree = tree
-            for p in path_list:
-                sub_tree = sub_tree["sub"][p]
-            for d in sorted(dirs):
-                # if len([x for x in FOLDER_BLACK_LIST if re.search(x, d) is not None]) > 0:
-                #     continue
-                sub_tree["sub"][d] = {
-                    "type": "dir",
-                    "name": d,
-                    "path": sub_tree["path"] + d + "/",
-                    "sub": dict()
-                }
-            for f in sorted(files):
-                if len([x for x in FILE_BLACK_LIST if re.match(x, f) is not None]) > 0:
-                    continue
-                sub_tree["sub"][f] = {
-                    "type": "file",
-                    "path": sub_tree["path"] + f,
-                    "name": f,
-                }
+                sub_tree = tree["sub"][root_name]
+                for p in path_list:
+                    sub_tree = sub_tree["sub"][p]
+                for d in sorted(dirs):
+                    sub_tree["sub"][d] = {
+                        "type": "dir",
+                        "name": d,
+                        "path": sub_tree["path"] + d + "/",
+                        "sub": dict()
+                    }
+                for f in sorted(files):
+                    if len([x for x in FILE_BLACK_LIST if re.match(x, f) is not None]) > 0:
+                        continue
+                    sub_tree["sub"][f] = {
+                        "type": "file",
+                        "path": sub_tree["path"] + f,
+                        "name": f,
+                    }
         return json.dumps(tree)
 
 
@@ -91,6 +102,7 @@ def file_tree():
 def file_api():
     if request.method == "GET":
         file_path = request.args.get("file_path")
+        file_path = parse_file_path(file_path)
         token = request.args.get("token")
         if token is None:
             if DB_ENABLE:
@@ -111,31 +123,33 @@ def file_api():
                     token.use += 1
                     db.session.commit()
                     file_path = token.file_path.lstrip("/")
-                    encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
-                    return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
+                    encode_print(u"{}".format(file_path))
+                    return send_file(file_path, as_attachment=True)
                 else:
                     return render_template("error.html", message=token)
             else:
                 file_path = token.lstrip("/")
-                encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
-                return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
+                encode_print(u"{}".format(file_path))
+                return send_file(file_path, as_attachment=True)
     elif request.method == "POST":
         file_path = request.form.get("file_path").lstrip("/")
-        encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
-        return send_file(os.path.join(ROOT_FOLDER, file_path), as_attachment=True)
+        file_path = parse_file_path(file_path)
+        encode_print(u"{}".format(file_path))
+        return send_file(file_path, as_attachment=True)
     elif request.method == "PUT":
         file_path = request.form.get("file_path").lstrip("/")
+        file_path = parse_file_path(file_path)
         upload_type = request.form.get("type")
         if upload_type == "folder":
             folder_name = request.form.get("folder_name")
-            if os.path.exists(os.path.join(ROOT_FOLDER, file_path)):
-                if os.path.exists(os.path.join(ROOT_FOLDER, file_path, folder_name)):
+            if os.path.exists(file_path):
+                if os.path.exists(os.path.join(file_path, folder_name)):
                     duplicate = 2
                     while os.path.exists(
-                            os.path.join(ROOT_FOLDER, file_path, u"{}({})".format(folder_name, duplicate))):
+                            os.path.join(file_path, u"{}({})".format(folder_name, duplicate))):
                         duplicate += 1
                     folder_name = u"{}({})".format(folder_name, duplicate)
-                os.mkdir(os.path.join(ROOT_FOLDER, file_path, folder_name))
+                os.mkdir(os.path.join(file_path, folder_name))
             return "OK"
         else:
             upload_file = request.files.get("upload_file")
@@ -146,7 +160,7 @@ def file_api():
                 part_index = int(_part_info_list[0])
                 part_total = int(_part_info_list[1])
             filename = secure_filename(upload_file.filename)
-            if os.path.exists(os.path.join(ROOT_FOLDER, file_path, filename)):
+            if os.path.exists(os.path.join(file_path, filename)):
                 duplicate = 2
                 extension = None
                 for ext in EXTENSION_WHITE_LIST:
@@ -163,28 +177,29 @@ def file_api():
                            + ".{}".format(extension) if extension is not None else ""
 
                 while os.path.exists(
-                        os.path.join(ROOT_FOLDER, file_path, merge_filename())):
+                        os.path.join(file_path, merge_filename())):
                     duplicate += 1
                 filename = merge_filename()
             if part_index > 0:
                 filename += u".part{}".format(part_index)
-            encode_print(u"PUT {} {} {}".format(ROOT_FOLDER, file_path, filename))
-            upload_file.save(os.path.join(ROOT_FOLDER, file_path, filename))
+            encode_print(u"PUT {} {}".format(file_path, filename))
+            upload_file.save(os.path.join(file_path, filename))
             if 0 < part_total == part_index:
                 true_filename = filename[:-len(u".part{}".format(part_total))]
-                with open(os.path.join(ROOT_FOLDER, file_path, true_filename), "wb") as f_out:
+                with open(os.path.join(file_path, true_filename), "wb") as f_out:
                     for i in range(1, part_total + 1):
                         part_filename = true_filename + u".part{}".format(i)
-                        encode_print(u"MERGE {} {} {}".format(ROOT_FOLDER, file_path, part_filename))
-                        with open(os.path.join(ROOT_FOLDER, file_path, part_filename), "rb") as f_in:
+                        encode_print(u"MERGE {} {}".format(file_path, part_filename))
+                        with open(os.path.join(file_path, part_filename), "rb") as f_in:
                             f_out.write(f_in.read())
-                        os.remove(os.path.join(ROOT_FOLDER, file_path, part_filename))
+                        os.remove(os.path.join(file_path, part_filename))
             return "OK"
     elif request.method == "DELETE":
         file_path = request.form.get("file_path").lstrip("/")
-        if os.path.exists(os.path.join(ROOT_FOLDER, file_path)):
-            encode_print(u"DELETE {}".format(os.path.join(ROOT_FOLDER, file_path)))
-            os.remove(os.path.join(ROOT_FOLDER, file_path))
+        file_path = parse_file_path(file_path)
+        if os.path.exists(file_path):
+            encode_print(u"DELETE {}".format(file_path))
+            os.remove(file_path)
         return "OK"
 
 
@@ -211,8 +226,8 @@ def preview():
                 token = use_token(token)
                 if isinstance(token, Token):
                     file_path = token.file_path.lstrip("/")
-                    encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
-                    return send_file(os.path.join(ROOT_FOLDER, file_path))
+                    encode_print(u"{}".format(file_path))
+                    return send_file(file_path, as_attachment=True)
                 else:
                     return render_template("error.html", message=token)
         else:
@@ -228,8 +243,8 @@ def preview():
                                    token=token)
         else:
             file_path = token.lstrip("/")
-            encode_print(u"{} {} {}".format(ROOT_FOLDER, file_path, os.path.join(ROOT_FOLDER, file_path)))
-            return send_file(os.path.join(ROOT_FOLDER, file_path))
+            encode_print(u"{}".format(file_path))
+            return send_file(file_path, as_attachment=True)
 
 
 def get_or_create_token(file_path, target_user):

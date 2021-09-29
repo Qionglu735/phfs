@@ -136,7 +136,7 @@ $(document).ready(function() {
 
                 let ul_stack = [];
                 // let ul_list = []
-                let i = 0;
+                let i = 1;
                 while (i < node_list.length) {
                     // stack pop
                     if (i > 0 && node_list[i - 1]["depth"] > node_list[i]["depth"]) {
@@ -149,7 +149,7 @@ $(document).ready(function() {
                     }
 
                     // stack push
-                    if (i === 0) {
+                    if (i === 1) {
                         ul_stack.push("<ul class='first_ul'>");
                     } else if (node_list[i - 1]["depth"] < node_list[i]["depth"]) {
                         if (expended_node.includes(node_list[i - 1]["info"]["path"])) {
