@@ -121,7 +121,7 @@ def file_api():
                 if isinstance(token, Token):
                     token.use += 1
                     db.session.commit()
-                    file_path = token.file_path.lstrip("/")
+                    file_path = token.file_path
                     encode_print(u"{}".format(file_path))
                     return send_file(file_path, as_attachment=True)
                 else:
