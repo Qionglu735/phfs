@@ -224,9 +224,9 @@ def preview():
             else:
                 token = use_token(token)
                 if isinstance(token, Token):
-                    file_path = token.file_path.lstrip("/")
+                    file_path = token.file_path
                     encode_print(u"{}".format(file_path))
-                    return send_file(file_path, as_attachment=True)
+                    return send_file(file_path)
                 else:
                     return render_template("error.html", message=token)
         else:
@@ -243,7 +243,7 @@ def preview():
         else:
             file_path = token.lstrip("/")
             encode_print(u"{}".format(file_path))
-            return send_file(file_path, as_attachment=True)
+            return send_file(file_path)
 
 
 def get_or_create_token(file_path, target_user):
