@@ -20,7 +20,6 @@ main = Blueprint("main", __name__)
 def parse_file_path(file_path):
     if file_path is not None:
         file_path = file_path.replace("\\", "/")
-        print file_path
         path_list = file_path.lstrip("/").split("/")
         real_root = ROOT_FOLDER_DICT[path_list[0]]
         return os.path.join(real_root, *path_list[1:])
