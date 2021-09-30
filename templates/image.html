@@ -7,17 +7,23 @@
 </head>
 <body class="black">
 <div class="center">
-    <img id="img" class="fit-height" src="{{ url_for('main.file_api') }}?token={{ token }}" alt="Error"/>
+    <img id="image" src="{{ url_for('main.file_api') }}?token={{ token }}" alt="Error"/>
 </div>
 </body>
 </html>
 
 <style>
+    html, body {
+        margin: 0;
+        padding: 0;
+    }
     .black {
         background-color: #000000;
     }
     .center {
         text-align: center;
+        margin: 0;
+        padding: 0;
     }
     .fit-height {
         max-height: 100vh;
@@ -36,23 +42,39 @@
 
 <script src="/static/js/jquery-3.5.1.min.js"></script>
 <script>
+    if($(window).height() <= $(window).width()) {
+        $("#image").addClass("fit-height");
+    }
+    else {
+        $("#image").addClass("fit-width");
+    }
     let zoom_level = 0;
-    $("#img")
+    $("#image")
         .on("click", function(event) {
             $(this).removeClass()
             zoom_level = (zoom_level + 1) % 3;
             if(zoom_level === 0) {
-                $(this).addClass("fit-height");
+                if($(window).height() <= $(window).width()) {
+                    $(this).addClass("fit-height");
+                }
+                else {
+                    $(this).addClass("fit-width");
+                }
             }
             if(zoom_level === 1) {
-                $(this).addClass("fit-width");
+                if($(window).height() <= $(window).width()) {
+                    $(this).addClass("fit-width");
+                }
+                else {
+                    $(this).addClass("fit-height");
+                }
             }
             if(zoom_level === 2) {
                 $(this).addClass("full-size");
             }
         })
-        .on("load", function(event) {
-            console.log("load");
+        .on("loadstart", function(event) {
+            console.log("loadstart")
         })
         .on("error", function(event) {
             console.log("error")

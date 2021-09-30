@@ -7,16 +7,40 @@
 </head>
 <body class="black">
 <div class="center">
-    <video id="video" src="{{ url_for('main.file_api') }}?token={{ token }}" controls/>
+    <video id="video" src="{{ url_for('main.file_api') }}?token={{ token }}" controls></video>
 </div>
 </body>
 </html>
 
 <style>
+    html, body {
+        margin: 0;
+        padding: 0;
+    }
     .black {
         background-color: #000000;
     }
     .center {
         text-align: center;
     }
+    .fit-height {
+        max-height: 96vh;
+        width: auto;
+        cursor: zoom-in;
+    }
+    .fit-width {
+        max-width: 100%;
+        height: auto;
+        cursor: zoom-in;
+    }
 </style>
+
+<script src="/static/js/jquery-3.5.1.min.js"></script>
+<script>
+    if($(window).height() <= $(window).width()) {
+        $("#video").addClass("fit-height");
+    }
+    else {
+        $("#video").addClass("fit-width");
+    }
+</script>

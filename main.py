@@ -25,6 +25,11 @@ def parse_file_path(file_path):
         return os.path.join(real_root, *path_list[1:])
 
 
+def detect_binary(file_path):
+    text_chars = bytearray({7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100)) - {0x7f})
+    return bool(open(file_path, "rb").read(1024).translate(None, text_chars))
+
+
 def encode_print(x):
     if sys.platform == "win32":
         print(x.encode("gbk"))
@@ -107,12 +112,10 @@ def file_api():
             if DB_ENABLE:
                 token = get_or_create_token(file_path, current_user)
                 return url_for("main.preview") + "?" + "&".join([
-                    # "file_path=" + file_path,
                     "token=" + token.token_id,
                 ])
             else:
                 return url_for("main.preview") + "?" + "&".join([
-                    # "file_path=" + file_path,
                     "token=" + file_path,
                 ])
         else:
@@ -243,6 +246,8 @@ def preview():
         else:
             file_path = token.lstrip("/")
             encode_print(u"{}".format(file_path))
+            print "is binary:", detect_binary(file_path)
+            # return send_file(file_path, as_attachment=detect_binary(file_path))
             return send_file(file_path)
 
 
