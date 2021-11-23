@@ -3,6 +3,7 @@
 
 from flask import Flask
 from flask_login import LoginManager
+from flask_migrate import Migrate
 
 from auth import auth as auth_blueprint
 from config import DB_ENABLE, DB_URI
@@ -17,6 +18,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = DB_URI
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = True
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 # blueprint for auth routes in our app
 app.register_blueprint(auth_blueprint, url_prefix="/treasure")

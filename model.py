@@ -17,7 +17,8 @@ class User(UserMixin, db.Model):
 
 
 class Token(db.Model):
-    token_id = db.Column(db.String(64), unique=True, primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)  # primary keys are required by SQLAlchemy
+    token_id = db.Column(db.String(64), unique=True)
     file_path = db.Column(db.String(1000))
     effective_time = db.Column(db.DateTime)
     shelf_life = db.Column(db.Integer, default=1)

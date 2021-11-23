@@ -1,6 +1,5 @@
 .idea
 *.pyc
-alembic
-alembic.ini
 config.py
+migrations
 venv
