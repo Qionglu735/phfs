@@ -7,7 +7,7 @@
 </head>
 <body class="black">
 <div class="center">
-    <video id="video" src="{{ url_for('main.file_api') }}?token={{ token }}" controls></video>
+    <video id="video" src="{{ url_for('main.file_api') }}?token={{ token }}" controls autoplay></video>
 </div>
 </body>
 </html>
@@ -43,4 +43,31 @@
     else {
         $("#video").addClass("fit-width");
     }
+
+    // https://www.learningjquery.com/2012/06/get-url-parameters-using-jquery
+    function GetURLParameter(sParam)
+    {
+        let sPageURL = window.location.search.substring(1);
+        let sURLVariables = sPageURL.split('&');
+        for (let i = 0; i < sURLVariables.length; i++)
+        {
+            let sParameterName = sURLVariables[i].split('=');
+            if (sParameterName[0] === sParam)
+            {
+                return sParameterName[1];
+            }
+        }
+    }
+
+    document.getElementById("video").addEventListener("ended", function(event) {
+        console.log(event);
+        setTimeout(function() {
+            let xml_http = new XMLHttpRequest();
+            xml_http.open("GET", "/treasure/file_api" +
+                "?file_path=" + GetURLParameter("next_path") +
+                "&node_id=" + GetURLParameter("next_node_id"), false);
+            xml_http.send(null);
+            window.open(xml_http.responseText);
+        }, 1000);
+    })
 </script>

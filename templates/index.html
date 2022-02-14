@@ -127,11 +127,13 @@ $(document).ready(function() {
             "{{ url_for('main.file_tree') }}",
             {},
             function (data) {
-                $("#file_tree").empty();
-                data = $.parseJSON(data);
+                let file_tree = $("#file_tree");
+                file_tree.empty();
+                // data = $.parseJSON(data);
                 // console.log(data);
-                node_list = [];
-                dfs(data, node_list, 0)
+                // node_list = [];
+                // dfs(data, node_list, 0)
+                node_list = $.parseJSON(data)
                 // console.log("node_list", node_list);
 
                 let ul_stack = [];
@@ -223,7 +225,7 @@ $(document).ready(function() {
                 // console.log("ul_stack", ul_stack)
                 // console.log(ul_stack.join(""))
 
-                $("#file_tree").html(ul_stack.join(""));
+                file_tree.html(ul_stack.join(""));
 
                 abort = false;
 
@@ -234,32 +236,32 @@ $(document).ready(function() {
 
     refresh();
 
-    function dfs(tree, node_list, depth) {
-        node_list.push({
-            "depth": depth,
-            "info": tree,
-        })
-        if(tree["sub"] != null) {
-            let sorted = Object.keys(tree["sub"]).sort(
-                function(x, y) {
-                    let res = 0
-                    if(tree["sub"][x]["type"] === tree["sub"][y]["type"]) {
-                        res = x.toLowerCase().localeCompare(y.toLowerCase());
-                    }
-                    else if(tree["sub"][x]["type"] === "dir" && tree["sub"][y]["type"] === "file") {
-                        res = -1;
-                    }
-                    else if(tree["sub"][x]["type"] === "file" && tree["sub"][y]["type"] === "dir") {
-                        res = 1;
-                    }
-                    return res;
-                }
-            );
-            for(let node of sorted) {
-                dfs(tree["sub"][node], node_list, depth + 1);
-            }
-        }
-    }
+    // function dfs(tree, node_list, depth) {
+    //     node_list.push({
+    //         "depth": depth,
+    //         "info": tree,
+    //     })
+    //     if(tree["sub"] != null) {
+    //         let sorted = Object.keys(tree["sub"]).sort(
+    //             function(x, y) {
+    //                 let res = 0
+    //                 if(tree["sub"][x]["type"] === tree["sub"][y]["type"]) {
+    //                     res = x.toLowerCase().localeCompare(y.toLowerCase());
+    //                 }
+    //                 else if(tree["sub"][x]["type"] === "dir" && tree["sub"][y]["type"] === "file") {
+    //                     res = -1;
+    //                 }
+    //                 else if(tree["sub"][x]["type"] === "file" && tree["sub"][y]["type"] === "dir") {
+    //                     res = 1;
+    //                 }
+    //                 return res;
+    //             }
+    //         );
+    //         for(let node of sorted) {
+    //             dfs(tree["sub"][node], node_list, depth + 1);
+    //         }
+    //     }
+    // }
 
     let ajax_queue = {
         queued_requests: [],
@@ -348,6 +350,7 @@ $(document).ready(function() {
             ajax_obj = $.ajax({
                 url: "{{ url_for('main.file_api') }}" + "?" + $.param({
                     "file_path": node["info"]["path"],
+                    "node_id": node["id"],
                 }),
                 type: "GET",
                 success: function(data){

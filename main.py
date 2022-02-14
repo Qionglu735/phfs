@@ -18,7 +18,7 @@ main = Blueprint("main", __name__)
 
 
 def parse_file_path(file_path):
-    if file_path is not None:
+    if file_path is not None and file_path != "":
         file_path = file_path.replace("\\", "/")
         path_list = file_path.lstrip("/").split("/")
         real_root = ROOT_FOLDER_DICT[path_list[0]]
@@ -49,66 +49,111 @@ def profile():
     return render_template("auth/profile.html", name=current_user.name)
 
 
+def generate_file_tree():
+    tree = {
+        "type": "dir",
+        "name": "/",
+        "path": "/",
+        "sub": dict()
+    }
+    root_folder_list = [[root_name, root_folder] for root_name, root_folder in ROOT_FOLDER_DICT.items()]
+    root_folder_list.sort(cmp=lambda x, y: x[0] < y[0])
+    for root_item in root_folder_list:
+        root_name = root_item[0]
+        root_folder = root_item[1].rstrip("/")
+        sub_tree = {
+            "type": "dir",
+            "name": root_name,
+            "path": "/" + root_name + "/",
+            "sub": dict()
+        }
+        tree["sub"][root_name] = sub_tree
+        for root, dirs, files in os.walk(root_folder):
+            dirs[:] = [d for d in dirs if len([x for x in FOLDER_BLACK_LIST if re.match(x, d) is not None]) == 0]
+            root = root.replace("\\", "/")
+            # print(root)
+            root = root.replace(root_folder, "", 1)
+            path_list = list()
+            if "/" in root:
+                path_list = root.split("/")[1:]
+
+            sub_tree = tree["sub"][root_name]
+            for p in path_list:
+                sub_tree = sub_tree["sub"][p]
+            for d in sorted(dirs):
+                sub_tree["sub"][d] = {
+                    "type": "dir",
+                    "name": d,
+                    "path": sub_tree["path"] + d + "/",
+                    "sub": dict()
+                }
+            for f in sorted(files):
+                if len([x for x in FILE_BLACK_LIST if re.match(x, f) is not None]) > 0:
+                    continue
+                sub_tree["sub"][f] = {
+                    "type": "file",
+                    "path": sub_tree["path"] + f,
+                    "name": f,
+                }
+    return tree
+
+
+def dfs(tree, depth=0, node_list=None):
+    if node_list is None:
+        node_list = list()
+    node_list.append({
+        "id": len(node_list),
+        "depth": depth,
+        "info": tree,
+    })
+    if "sub" in tree:
+        def node_cmp(_x, _y):
+            res = 0
+            if tree["sub"][_x]["type"] == tree["sub"][_y]["type"]:
+                res = -1 if _x.lower() < _y.lower() else 0 if _x.lower() == _y.lower() else 1
+            elif tree["sub"][_x]["type"] == "dir" and tree["sub"][_y]["type"] == "file":
+                res = -1
+            elif tree["sub"][_x]["type"] == "file" and tree["sub"][_y]["type"] == "dir":
+                res = 1
+            return res
+
+        sorted_list = [_x for _x in tree["sub"]]
+        sorted_list.sort(cmp=node_cmp)
+
+        for name in sorted_list:
+            dfs(tree["sub"][name], depth + 1, node_list)
+    return node_list
+
+
+def find_next_node(node_list, node_id):
+    if node_id + 1 < len(node_list) and node_list[node_id + 1]["depth"] == node_list[node_id]["depth"]:
+        return node_list[node_id + 1]
+    else:
+        while node_id > 0 and node_list[node_id - 1]["depth"] == node_list[node_id]["depth"]:
+            node_id -= 1
+        return node_list[node_id]
+
+
 @main.route("/file_tree", methods=["GET"])
 @login_required(10)
 def file_tree():
     if request.method == "GET":
-        tree = {
-            "type": "dir",
-            "name": "/",
-            "path": "/",
-            "sub": dict()
-        }
-        root_folder_list = [[root_name, root_folder] for root_name, root_folder in ROOT_FOLDER_DICT.items()]
-        root_folder_list.sort(cmp=lambda x, y: x[0] < y[0])
-        for root_item in root_folder_list:
-            root_name = root_item[0]
-            root_folder = root_item[1].rstrip("/")
-            sub_tree = {
-                "type": "dir",
-                "name": root_name,
-                "path": "/" + root_name + "/",
-                "sub": dict()
-            }
-            tree["sub"][root_name] = sub_tree
-            for root, dirs, files in os.walk(root_folder):
-                dirs[:] = [d for d in dirs if len([x for x in FOLDER_BLACK_LIST if re.match(x, d) is not None]) == 0]
-                root = root.replace("\\", "/")
-                # print(root)
-                root = root.replace(root_folder, "", 1)
-                path_list = list()
-                if "/" in root:
-                    path_list = root.split("/")[1:]
-
-                sub_tree = tree["sub"][root_name]
-                for p in path_list:
-                    sub_tree = sub_tree["sub"][p]
-                for d in sorted(dirs):
-                    sub_tree["sub"][d] = {
-                        "type": "dir",
-                        "name": d,
-                        "path": sub_tree["path"] + d + "/",
-                        "sub": dict()
-                    }
-                for f in sorted(files):
-                    if len([x for x in FILE_BLACK_LIST if re.match(x, f) is not None]) > 0:
-                        continue
-                    sub_tree["sub"][f] = {
-                        "type": "file",
-                        "path": sub_tree["path"] + f,
-                        "name": f,
-                    }
-        return json.dumps(tree)
+        tree = generate_file_tree()
+        node_list = dfs(tree)
+        return json.dumps(node_list)
 
 
 @main.route("/file_api", methods=["GET", "POST", "PUT", "DELETE"])
 @login_required(10)
 def file_api():
     if request.method == "GET":
-        file_path = request.args.get("file_path")
-        file_path = parse_file_path(file_path)
+        file_path = parse_file_path(request.args.get("file_path"))
+        node_id = request.args.get("node_id")
         token = request.args.get("token")
         if token is None:
+            tree = generate_file_tree()
+            node_list = dfs(tree)
+            next_node = find_next_node(node_list, int(node_id))
             if DB_ENABLE:
                 token = get_or_create_token(file_path, current_user)
                 return url_for("main.preview") + "?" + "&".join([
@@ -117,6 +162,8 @@ def file_api():
             else:
                 return url_for("main.preview") + "?" + "&".join([
                     "token=" + file_path,
+                    "next_path=" + next_node["info"]["path"],
+                    "next_node_id=" + str(next_node["id"]),
                 ])
         else:
             if DB_ENABLE:
@@ -220,7 +267,7 @@ def preview():
                 return render_template("image.html",
                                        filename=token.file_path.split("/")[-1],
                                        token=token.token_id)
-            elif token.file_path.split(".")[-1] in ["mp4"]:
+            elif token.file_path.split(".")[-1] in ["mp4", "webm", "ogg"]:
                 return render_template("video.html",
                                        filename=token.file_path.split("/")[-1],
                                        token=token.token_id)
