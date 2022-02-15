@@ -26,12 +26,12 @@
     .fit-height {
         max-height: 96vh;
         width: auto;
-        cursor: zoom-in;
+        /*cursor: zoom-in;*/
     }
     .fit-width {
         max-width: 100%;
         height: auto;
-        cursor: zoom-in;
+        /*cursor: zoom-in;*/
     }
 </style>
 
@@ -67,7 +67,7 @@
                 "?file_path=" + GetURLParameter("next_path") +
                 "&node_id=" + GetURLParameter("next_node_id"), false);
             xml_http.send(null);
-            window.open(xml_http.responseText);
+            window.open(xml_http.responseText, "_self");
         }, 1000);
     })
 </script>

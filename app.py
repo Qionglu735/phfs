@@ -29,6 +29,7 @@ app.register_blueprint(main_blueprint, url_prefix="/treasure")
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.init_app(app)
+login_manager.login_message = ""
 
 
 @login_manager.user_loader
@@ -42,4 +43,4 @@ def load_user(user_id):
 
 if __name__ == "__main__":
     # db.create_all(app=app)  # pass the create_app result so Flask-SQLAlchemy gets the configuration.
-    app.run(host="0.0.0.0", port=12345, debug=True)
+    app.run(host="0.0.0.0", port=12345, threaded=True, debug=True)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from flask import Blueprint, render_template, request, send_file, url_for
+from flask import Blueprint, make_response, render_template, request, Response, send_file, url_for
 from flask_login import current_user
 
 import datetime
@@ -143,6 +143,23 @@ def file_tree():
         return json.dumps(node_list)
 
 
+def get_chunk(file_path, byte1=None, byte2=None):
+    file_size = os.stat(file_path).st_size
+    start = 0
+
+    if byte1 < file_size:
+        start = byte1
+    if byte2:
+        length = byte2 + 1 - byte1
+    else:
+        length = file_size - start
+
+    with open(file_path, "rb") as f:
+        f.seek(start)
+        chunk = f.read(length)
+    return chunk, start, length, file_size
+
+
 @main.route("/file_api", methods=["GET", "POST", "PUT", "DELETE"])
 @login_required(10)
 def file_api():
@@ -166,20 +183,33 @@ def file_api():
                     "next_node_id=" + str(next_node["id"]),
                 ])
         else:
+            range_header = request.headers.get("Range", None)
+            byte1, byte2 = 0, None
+            if range_header:
+                match = re.search(r'(\d+)-(\d*)', range_header)
+                groups = match.groups()
+                if groups[0]:
+                    byte1 = int(groups[0])
+                if groups[1]:
+                    byte2 = int(groups[1])
             if DB_ENABLE:
                 token = use_token(token)
                 if isinstance(token, Token):
                     token.use += 1
                     db.session.commit()
                     file_path = token.file_path
-                    encode_print(u"{}".format(file_path))
-                    return send_file(file_path, as_attachment=True)
+                    # encode_print(u"{}".format(file_path))
+                    # return send_file(file_path, as_attachment=True)
                 else:
                     return render_template("error.html", message=token)
             else:
                 file_path = token.lstrip("/")
-                encode_print(u"{}".format(file_path))
-                return send_file(file_path, as_attachment=True)
+            encode_print(u"{}".format(file_path))
+            # return send_file(file_path, as_attachment=True)
+            chunk, start, length, file_size = get_chunk(file_path, byte1, byte2)
+            resp = Response(chunk, 206, direct_passthrough=True)
+            resp.headers.add("Content-Range", "bytes {0}-{1}/{2}".format(start, start + length - 1, file_size))
+            return resp
     elif request.method == "POST":
         file_path = request.form.get("file_path").lstrip("/")
         file_path = parse_file_path(file_path)
@@ -268,9 +298,11 @@ def preview():
                                        filename=token.file_path.split("/")[-1],
                                        token=token.token_id)
             elif token.file_path.split(".")[-1] in ["mp4", "webm", "ogg"]:
-                return render_template("video.html",
-                                       filename=token.file_path.split("/")[-1],
-                                       token=token.token_id)
+                response = make_response(render_template("video.html",
+                                         filename=token.file_path.split("/")[-1],
+                                         token=token.token_id))
+                response.headers["Accept-Ranges"] = "bytes"
+                return response
             else:
                 token = use_token(token)
                 if isinstance(token, Token):
