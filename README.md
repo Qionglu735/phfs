@@ -1,5 +1,5 @@
 
-# Python Html File Server
+# PHFS: Python Html File Server
 
 
 
@@ -24,4 +24,11 @@ Create Migration Script
 
 Running Migration
 
+    flask db upgrade
+
+ERROR [flask_migrate] Error: Can't locate revision identified by '...'
+
+    flask db history
+    # Update the version_num field to the head version (in mysql)
+    flask db migrate
     flask db upgrade

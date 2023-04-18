@@ -134,7 +134,7 @@ $(document).ready(function() {
                 // node_list = [];
                 // dfs(data, node_list, 0)
                 node_list = $.parseJSON(data)
-                // console.log("node_list", node_list);
+                console.log("node_list", node_list);
 
                 let ul_stack = [];
                 // let ul_list = []
@@ -191,15 +191,26 @@ $(document).ready(function() {
                         }
                         ul_stack.push(li);
                     } else {
-                        ul_stack.push("<li>" +
-                            "<span id='node_" + i + "_name'" +
-                            "class='file-node far fa-file'>" + node_list[i]["info"]["name"] + "</span>" +
-                            "<i id='node_" + i + "' " +
-                            "class='download-node far fa-arrow-alt-circle-down'></i>" +
-                            "<i id='node_" + i + "_delete' " +
-                            "class='delete-node far fa-minus-circle'></i>" +
-                            "</li>"
-                        );
+                        ul_stack.push(`
+                            <li>
+                                <span id="node_${i}_name" class="file-node far fa-file">
+                                    ${node_list[i]["info"]["name"]}
+                                </span>
+                                <i id="node_${i}" class="download-node far fa-arrow-alt-circle-down"></i>
+                                ${(function() {
+                                    if(node_list[i]["info"]["lock"] === true) {
+                                        return `<i id="node_${i}_lock" class="lock-node far fa-lock-alt"></i>`
+                                    }
+                                    else if(node_list[i]["info"]["lock"] === false) {
+                                        return `<i id="node_${i}_lock" class="lock-node fas fa-lock-open-alt"></i>`
+                                    }
+                                    else {
+                                        return ""
+                                    }
+                                })()}
+                                <i id="node_${i}_delete" class="delete-node far fa-minus-circle"></i>
+                            </li>
+                        `);
                     }
                     i += 1;
                 }
@@ -425,6 +436,29 @@ $(document).ready(function() {
                     });
                 }
             }
+        })
+        .on("click", ".lock-node", function(event) {
+            let node = node_list[parseInt(this.id.replace("node_", "").replace("_lock", ""))];
+            let form_data = new FormData();
+            if(node["info"]["lock"] === true) {
+                form_data.append("op", "unlock");
+            }
+            else if(node["info"]["lock"] === false) {
+                form_data.append("op", "lock");
+            }
+            form_data.append("file_path", node["info"]["path"]);
+            ajax_obj = $.ajax({
+                url: "{{ url_for('main.file_api') }}",
+                type: "UPDATE",
+                data: form_data,
+                processData: false,  //必须设置为false，否则jQuery会当作form-urlencoded处理
+                contentType: false,  //必须设置为false，由浏览器自动设置Content-Type
+                success: function(data){
+                    refresh()
+                },
+                error: function(data){
+                }
+            });
         })
         .on("change", ".upload-node", function(event) {
             let node = node_list[parseInt(this.id.replace("node_", ""))];

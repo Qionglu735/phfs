@@ -4,6 +4,7 @@ from flask import Blueprint, make_response, render_template, request, Response, 
 from flask_login import current_user
 
 import datetime
+import functools
 import json
 import os
 import re
@@ -12,7 +13,7 @@ import uuid
 
 from auth import login_required
 from config import *
-from model import db, Token
+from model import db, Token, User
 
 main = Blueprint("main", __name__)
 
@@ -56,8 +57,12 @@ def generate_file_tree():
         "path": "/",
         "sub": dict()
     }
+    anonymous_path_list = list()
+    if DB_ENABLE:
+        for anonymous_token in Token.query.join(User).filter_by(email="Anonymous"):
+            anonymous_path_list.append(anonymous_token.file_path)
     root_folder_list = [[root_name, root_folder] for root_name, root_folder in ROOT_FOLDER_DICT.items()]
-    root_folder_list.sort(cmp=lambda x, y: x[0] < y[0])
+    root_folder_list.sort(key=lambda x: [0])
     for root_item in root_folder_list:
         root_name = root_item[0]
         root_folder = root_item[1].rstrip("/")
@@ -94,7 +99,10 @@ def generate_file_tree():
                     "type": "file",
                     "path": sub_tree["path"] + f,
                     "name": f,
+                    "lock": None,
                 }
+                if DB_ENABLE:
+                    sub_tree["sub"][f]["lock"] = parse_file_path(sub_tree["sub"][f]["path"]) not in anonymous_path_list
     return tree
 
 
@@ -118,7 +126,7 @@ def dfs(tree, depth=0, node_list=None):
             return res
 
         sorted_list = [_x for _x in tree["sub"]]
-        sorted_list.sort(cmp=node_cmp)
+        sorted_list.sort(key=functools.cmp_to_key(node_cmp))
 
         for name in sorted_list:
             dfs(tree["sub"][name], depth + 1, node_list)
@@ -160,7 +168,7 @@ def get_chunk(file_path, byte1=None, byte2=None):
     return chunk, start, length, file_size
 
 
-@main.route("/file_api", methods=["GET", "POST", "PUT", "DELETE"])
+@main.route("/file_api", methods=["GET", "POST", "PUT", "DELETE", "UPDATE"])
 @login_required(10)
 def file_api():
     if request.method == "GET":
@@ -280,6 +288,34 @@ def file_api():
             encode_print(u"DELETE {}".format(file_path))
             os.remove(file_path)
         return "OK"
+    elif request.method == "UPDATE":
+        op = request.form.get("op")
+        file_path = request.form.get("file_path").lstrip("/")
+        print(file_path, parse_file_path(file_path))
+        file_path = parse_file_path(file_path)
+        if DB_ENABLE:
+            if op == "unlock":
+                anonymous = User.query.filter_by(email="Anonymous").first()
+                if anonymous is None:
+                    anonymous = User(email="Anonymous", auth=1)
+                    db.session.add(anonymous)
+                    db.session.commit()
+                token = Token.query.filter_by(user_id=anonymous.id, file_path=file_path).first()
+                if token is None:
+                    token = Token(token_id=uuid.uuid4().hex,
+                                  file_path=file_path,
+                                  user_id=anonymous.id)
+                    db.session.add(token)
+                    db.session.commit()
+            elif op == "lock":
+                anonymous = User.query.filter_by(email="Anonymous").first()
+                if anonymous is not None:
+                    token = Token.query.filter_by(user_id=anonymous.id, file_path=file_path).first()
+                    if token is not None:
+                        db.session.delete(token)
+                        db.session.commit()
+
+        return "Update"
 
 
 def secure_filename(x):
@@ -325,19 +361,23 @@ def preview():
         else:
             file_path = token.lstrip("/")
             encode_print(u"{}".format(file_path))
-            print "is binary:", detect_binary(file_path)
+            print("is binary:", detect_binary(file_path))
             # return send_file(file_path, as_attachment=detect_binary(file_path))
             return send_file(file_path)
 
 
 def get_or_create_token(file_path, target_user):
     now = datetime.datetime.now()
+    anonymous_token = Token.query.filter_by(file_path=file_path).join(User) \
+        .filter_by(email="Anonymous").first()
+    if anonymous_token is not None:
+        return anonymous_token
     token = Token.query.filter_by(user_id=target_user.id, file_path=file_path).first()
     if token is None or token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
         token = Token(token_id=uuid.uuid4().hex,
                       file_path=file_path,
                       effective_time=now,
-                      user_id=current_user.id)
+                      user_id=target_user.id)
         db.session.add(token)
         db.session.commit()
     return token
@@ -349,6 +389,12 @@ def check_token(token):
         token = Token.query.filter_by(token_id=token).first()
     if token is None:
         return "Not exists"
+    token_user = User.query.filter_by(id=token.user_id).first()
+    print(token_user.email)
+    if token_user is not None and token_user.email == "Anonymous":
+        return token
+    elif token_user.auth < 10:
+        return "Access Denied"
     elif token.use >= token.max_use:
         return "Out of use"
     elif token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
