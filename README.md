@@ -1,30 +1,17 @@
 
 # PHFS: Python Html File Server
 
+Copy config.py
 
+    cp config.example.py config.py
 
-
-
-
-
-
-Creating an Environment
+Init db & migrations
 
     flask db init
-
-Editing the .ini File
-
-    vi migrations/alembic.ini
-    
-        sqlalchemy.url = mysql://root:root@127.0.0.1:3306/phfs?charset=utf8
-
-Create Migration Script
-
     flask db migrate
-
-Running Migration
-
     flask db upgrade
+
+---
 
 ERROR [flask_migrate] Error: Can't locate revision identified by '...'
 
