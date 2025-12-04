@@ -80,7 +80,7 @@ def login_required(auth_level=1):
         def wrapper(*args, **kwargs):
             session["last_url"] = request.url
 
-            if DB_ENABLE:
+            if DB_ENABLE and not current_user.is_authenticated and auth_level > 1:
                 @_login_required  # from flask_login import login_required as _login_required
                 def inner(*_args, **_kwargs):
                     if current_user.auth < auth_level:

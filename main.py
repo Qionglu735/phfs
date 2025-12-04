@@ -66,6 +66,8 @@ def generate_file_tree():
     for root_item in root_folder_list:
         root_name = root_item[0]
         root_folder = root_item[1].rstrip("/")
+        if sys.platform == "win32" and root_folder.endswith(":"):
+            root_folder += "/"
         sub_tree = {
             "type": "dir",
             "name": root_name,
@@ -323,7 +325,7 @@ def secure_filename(x):
 
 
 @main.route("/preview")
-@login_required(10)
+@login_required(1)
 def preview():
     token = request.args.get("token", "")
     if DB_ENABLE:
@@ -390,17 +392,24 @@ def check_token(token):
     if token is None:
         return "Not exists"
     token_user = User.query.filter_by(id=token.user_id).first()
-    print(token_user.email)
-    if token_user is not None and token_user.email == "Anonymous":
-        return token
-    elif token_user.auth < 10:
+    if token_user is None:
         return "Access Denied"
-    elif token.use >= token.max_use:
-        return "Out of use"
-    elif token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
-        return "Out of time"
+    if "email" not in current_user.__dict__:
+        if token_user.email == "Anonymous":
+            return token
+        else:
+            return "Access Denied"
+    elif current_user.email != token_user.email:
+        return "Access Denied"
     else:
-        return token
+        if token_user.auth < 10:
+            return "Access Denied"
+        elif token.use >= token.max_use:
+            return "Out of use"
+        elif token.effective_time + datetime.timedelta(hours=token.shelf_life) < now:
+            return "Out of time"
+        else:
+            return token
 
 
 def use_token(token):
