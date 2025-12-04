@@ -394,12 +394,9 @@ def check_token(token):
     token_user = User.query.filter_by(id=token.user_id).first()
     if token_user is None:
         return "Access Denied"
-    if "email" not in current_user.__dict__:
-        if token_user.email == "Anonymous":
-            return token
-        else:
-            return "Access Denied"
-    elif current_user.email != token_user.email:
+    elif token_user.email == "Anonymous":
+        return token
+    elif "email" not in current_user.__dict__ or current_user.email != token_user.email:
         return "Access Denied"
     else:
         if token_user.auth < 10:
